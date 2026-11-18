@@ -39,12 +39,12 @@ Publisher**:
 
 - Publisher: GitHub Actions
 - Organization or user: `StevenMatchett`
-- Repository: `t3code`
+- Repository: `t3tui`
 - Workflow filename: `tui-npm-packages.yml`
 - Environment: leave empty
 
 A new platform package must be published by hand once before it can get a trusted publisher. The
-packages' `repository.url` must stay `https://github.com/StevenMatchett/t3code`, which npm checks
+packages' `repository.url` must stay `https://github.com/StevenMatchett/t3tui`, which npm checks
 against the workflow's repository.
 
 ## Build and test by hand

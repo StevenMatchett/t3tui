@@ -20,7 +20,7 @@ export const NPM_PLATFORMS = [
 ];
 const repository = {
   type: "git",
-  url: "git+https://github.com/StevenMatchett/t3code.git",
+  url: "git+https://github.com/StevenMatchett/t3tui.git",
   directory: "apps/tui",
 };
 const readJson = async (path) => JSON.parse(await NodeFSP.readFile(path, "utf8"));
@@ -60,7 +60,7 @@ const readme = (title, body) =>
     "npx t3tui",
     "```",
     "",
-    "Source and documentation: https://github.com/StevenMatchett/t3code",
+    "Source and documentation: https://github.com/StevenMatchett/t3tui",
     "",
   ].join("\n");
 
