@@ -228,8 +228,8 @@ The commands below use Bash on macOS or Linux. Clone this fork and install its d
 with [Vite+](#install-vp):
 
 ```bash
-git clone https://github.com/StevenMatchett/t3code.git
-cd t3code
+git clone https://github.com/StevenMatchett/t3tui.git
+cd t3tui
 vp i
 pnpm run install:tui
 ```
