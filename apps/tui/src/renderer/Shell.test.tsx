@@ -1941,12 +1941,14 @@ describe("inbox sidebar", () => {
       })),
     );
     await driver.flush();
+    expect(driver.captureFrame()).toContain("Working (0)");
     expect(driver.captureFrame()).toContain("Settled (0)");
     expect(rowOf(driver, "inbox-19")).toBeUndefined();
 
     for (let step = 0; step < 19; step++) await driver.input.pressKey("ARROW_DOWN");
     await driver.flush();
     expect(rowOf(driver, "inbox-19")).toBeDefined();
+    expect(driver.captureFrame()).toContain("Working (0)");
     expect(driver.captureFrame()).toContain("Settled (0)");
   });
 

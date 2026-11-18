@@ -404,7 +404,8 @@ export function buildShelfRows(input: BuildShelfRowsInput): readonly ShelfRow[] 
       ),
     ).map((thread) => threadRow(thread, "active", "card")),
     // Only what you last sent moves a row here, so the shelf holds still while agents finish.
-    ...(shelves.working.length > 0
+    // Like Settled, its header stays even when empty, so busy work always has a known place.
+    ...(scoped.length > 0
       ? collapsible(
           "working",
           newestFirst(shelves.working, (thread) =>

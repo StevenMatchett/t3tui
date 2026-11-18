@@ -367,7 +367,16 @@ export function ShelfSidebar(props: ShelfSidebarProps) {
   const dock = useMemo(() => listed.slice(split), [listed, split]);
   const need = (part: readonly ShelfRow[]) =>
     part.reduce((sum, row) => sum + shelfRowHeight(row), 0);
-  const panes = split > 0 ? shelfPaneHeights(need(inbox), need(dock), listHeight) : null;
+  const dockNeed = need(dock);
+  // While everything fits, the shelves still get a pane of their own, sized to their rows, so
+  // they sit at the bottom the same way whether or not the inbox scrolls.
+  const panes =
+    split > 0
+      ? (shelfPaneHeights(need(inbox), dockNeed, listHeight) ?? {
+          inbox: Math.max(1, listHeight - dockNeed),
+          dock: Math.min(dockNeed, listHeight),
+        })
+      : null;
   // The pane without the cursor holds where it was scrolled, so moving between them never jumps.
   const anchors = useRef({ inbox: 0, dock: 0 });
   const inDock = listCursor >= split;
@@ -448,7 +457,9 @@ export function ShelfSidebar(props: ShelfSidebarProps) {
       </Stack>
       {panes ? (
         <>
-          <Stack height={panes.inbox} flexShrink={0} flexDirection="column">
+          {/* The shelves claim their rows first, so if the sidebar is ever shorter than its
+              height says, the inbox gives up rows instead of Working and Settled. */}
+          <Stack flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column">
             {pane(inbox, 0, panes.inbox, inboxAnchor)}
           </Stack>
           <Stack height={panes.dock} flexShrink={0} flexDirection="column">

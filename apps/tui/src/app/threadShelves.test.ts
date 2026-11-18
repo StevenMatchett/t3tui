@@ -102,6 +102,10 @@ describe("inbox shelves", () => {
     ]);
   });
 
+  it("keeps the Working and Settled headers while both are empty", () => {
+    expect(ids(rowsFor([thread("inbox")]))).toEqual(["inbox", "shelf:working", "shelf:settled"]);
+  });
+
   it("puts what came back most recently on top of the inbox", () => {
     const rows = rowsFor(
       [
@@ -118,7 +122,7 @@ describe("inbox shelves", () => {
     const rows = rowsFor([thread("a", { settledOverride: "settled" }), thread("b")], {
       openThreadId: ThreadId.make("a"),
     });
-    expect(ids(rows)).toEqual(["b", "shelf:settled", "a"]);
+    expect(ids(rows)).toEqual(["b", "shelf:working", "shelf:settled", "a"]);
   });
 
   it("does not park threads on shelves the server cannot take them back from", () => {
