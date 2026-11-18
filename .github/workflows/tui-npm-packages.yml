@@ -1,7 +1,8 @@
 name: TUI npm packages
 
 # Builds and smoke-tests the `npx t3tui` packages on each platform. Every push to tui-main publishes
-# the next patch version through npm trusted publishing (no token), then tags and releases it.
+# the next patch version through npm trusted publishing (no token), which npm ties to
+# StevenMatchett/t3tui and this filename, then tags and releases it.
 # See docs/operations/tui-npm-release.md.
 on:
   push:
