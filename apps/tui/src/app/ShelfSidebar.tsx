@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   resolveThreadPullRequestBadge,
   visibleThreadPullRequests,
@@ -378,14 +378,16 @@ export function ShelfSidebar(props: ShelfSidebarProps) {
         })
       : null;
   // The pane without the cursor holds where it was scrolled, so moving between them never jumps.
-  const anchors = useRef({ inbox: 0, dock: 0 });
-  const inDock = listCursor >= split;
-  if (listCursor >= 0) {
-    if (inDock) anchors.current.dock = listCursor - split;
-    else anchors.current.inbox = listCursor;
-  }
-  const inboxAnchor = Math.min(anchors.current.inbox, Math.max(0, inbox.length - 1));
-  const dockAnchor = Math.min(anchors.current.dock, Math.max(0, dock.length - 1));
+  const [held, setHeld] = useState({ inbox: 0, dock: 0 });
+  const anchors =
+    listCursor < 0
+      ? held
+      : listCursor >= split
+        ? { ...held, dock: listCursor - split }
+        : { ...held, inbox: listCursor };
+  if (anchors.inbox !== held.inbox || anchors.dock !== held.dock) setHeld(anchors);
+  const inboxAnchor = Math.min(anchors.inbox, Math.max(0, inbox.length - 1));
+  const dockAnchor = Math.min(anchors.dock, Math.max(0, dock.length - 1));
   const pane = (items: readonly ShelfRow[], offset: number, height: number, anchor: number) => (
     <ListView<ShelfRow>
       items={items}
