@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import {
   resolveThreadPullRequestBadge,
   visibleThreadPullRequests,
@@ -16,6 +16,7 @@ import type { ThemeToken } from "../ui/theme.ts";
 import { useThemeColor, useUi } from "../ui/context.tsx";
 import { TurnTiming } from "../ui/TurnTiming.tsx";
 import {
+  shelfPaneHeights,
   shelfRowHeight,
   shelfRowRecedes,
   type ShelfRow,
@@ -302,6 +303,100 @@ export function ShelfSidebar(props: ShelfSidebarProps) {
   ) : (
     <EmptyState title="No threads yet." description="Press N to start one." />
   );
+  const renderRow = (row: ShelfRow, selected: boolean) => {
+    const background = selected && selectionColor ? { backgroundColor: selectionColor } : {};
+    if (row.kind === "project-scope") return null;
+    if (row.kind === "shelf") {
+      const glyph = resolveGlyph(row.expanded ? "expanded" : "collapsed", capabilities.unicode);
+      return (
+        <Stack height={1} width="100%" {...background}>
+          <Text
+            height={1}
+            wrapMode="none"
+            truncate
+            tone={selected && props.focused ? "accent" : "muted"}
+            strong={selected && props.focused}
+          >
+            {`${selected ? ">" : " "} ${glyph} ${SHELF_TITLES[row.shelf]}${row.expanded ? "" : ` (${row.count})`}`}
+          </Text>
+        </Stack>
+      );
+    }
+    if (row.kind === "more")
+      return (
+        <Stack height={1} width="100%" {...background}>
+          <Text height={1} wrapMode="none" truncate tone={selected ? "accent" : "muted"}>
+            {`${selected ? ">" : " "}   Show ${row.count} more`}
+          </Text>
+        </Stack>
+      );
+    const project = props.projectTitle(row.thread);
+    const marked = props.marked.has(row.id);
+    return (
+      <>
+        <Stack flexDirection="column" width="100%" flexShrink={0} {...background}>
+          {row.variant === "card" ? (
+            <Card
+              row={row}
+              project={project}
+              width={props.width}
+              selected={selected}
+              marked={marked}
+            />
+          ) : row.variant === "search" ? (
+            <SearchResult row={row} project={project} selected={selected} marked={marked} />
+          ) : (
+            <Slim row={row} selected={selected} marked={marked} />
+          )}
+        </Stack>
+        {/* Cards are several lines each, so without this they read as one block of text. */}
+        {row.variant === "card" ? (
+          <Text height={1} flexShrink={0} tone="border" wrapMode="none">
+            {(capabilities.unicode ? "─" : "-").repeat(Math.max(0, props.width))}
+          </Text>
+        ) : null}
+      </>
+    );
+  };
+  const listHeight = Math.max(1, props.height - 1);
+  // Pinned and returned threads scroll on their own above the shelves, so a long inbox can never
+  // push Working or Settled off screen.
+  const firstShelf = listed.findIndex((row) => row.kind === "shelf");
+  const split = firstShelf > 0 ? firstShelf : 0;
+  const inbox = useMemo(() => listed.slice(0, split), [listed, split]);
+  const dock = useMemo(() => listed.slice(split), [listed, split]);
+  const need = (part: readonly ShelfRow[]) =>
+    part.reduce((sum, row) => sum + shelfRowHeight(row), 0);
+  const panes = split > 0 ? shelfPaneHeights(need(inbox), need(dock), listHeight) : null;
+  // The pane without the cursor holds where it was scrolled, so moving between them never jumps.
+  const anchors = useRef({ inbox: 0, dock: 0 });
+  const inDock = listCursor >= split;
+  if (listCursor >= 0) {
+    if (inDock) anchors.current.dock = listCursor - split;
+    else anchors.current.inbox = listCursor;
+  }
+  const inboxAnchor = Math.min(anchors.current.inbox, Math.max(0, inbox.length - 1));
+  const dockAnchor = Math.min(anchors.current.dock, Math.max(0, dock.length - 1));
+  const pane = (items: readonly ShelfRow[], offset: number, height: number, anchor: number) => (
+    <ListView<ShelfRow>
+      items={items}
+      selected={listCursor - offset}
+      scrollAnchor={anchor}
+      height={height}
+      rowHeight={shelfRowHeight}
+      pushDown={(row) => row.kind === "shelf"}
+      itemKey={(row) => row.id}
+      itemId={(row) => `navigation-${row.id}`}
+      empty={empty}
+      {...(props.onActivate
+        ? { onActivate: (row, _index, modifiers) => props.onActivate?.(row, modifiers) }
+        : {})}
+      onContextMenu={(row, position) => {
+        if (row.kind === "thread") props.onThreadContextMenu?.(row.thread, position);
+      }}
+      renderItem={(row, index) => renderRow(row, index + offset === listCursor)}
+    />
+  );
   return (
     <Stack flexDirection="column" height="100%">
       <Stack height={1} flexShrink={0} flexDirection="row" gap={1}>
@@ -351,81 +446,18 @@ export function ShelfSidebar(props: ShelfSidebarProps) {
           </>
         )}
       </Stack>
-      <ListView<ShelfRow>
-        items={listed}
-        selected={listCursor}
-        height={Math.max(1, props.height - 1)}
-        rowHeight={shelfRowHeight}
-        pushDown={(row) => row.kind === "shelf"}
-        itemKey={(row) => row.id}
-        itemId={(row) => `navigation-${row.id}`}
-        empty={empty}
-        {...(props.onActivate
-          ? { onActivate: (row, _index, modifiers) => props.onActivate?.(row, modifiers) }
-          : {})}
-        onContextMenu={(row, position) => {
-          if (row.kind === "thread") props.onThreadContextMenu?.(row.thread, position);
-        }}
-        renderItem={(row, index) => {
-          const selected = index === listCursor;
-          const background = selected && selectionColor ? { backgroundColor: selectionColor } : {};
-          if (row.kind === "project-scope") return null;
-          if (row.kind === "shelf") {
-            const glyph = resolveGlyph(
-              row.expanded ? "expanded" : "collapsed",
-              capabilities.unicode,
-            );
-            return (
-              <Stack height={1} width="100%" {...background}>
-                <Text
-                  height={1}
-                  wrapMode="none"
-                  truncate
-                  tone={selected && props.focused ? "accent" : "muted"}
-                  strong={selected && props.focused}
-                >
-                  {`${selected ? ">" : " "} ${glyph} ${SHELF_TITLES[row.shelf]}${row.expanded ? "" : ` (${row.count})`}`}
-                </Text>
-              </Stack>
-            );
-          }
-          if (row.kind === "more")
-            return (
-              <Stack height={1} width="100%" {...background}>
-                <Text height={1} wrapMode="none" truncate tone={selected ? "accent" : "muted"}>
-                  {`${selected ? ">" : " "}   Show ${row.count} more`}
-                </Text>
-              </Stack>
-            );
-          const project = props.projectTitle(row.thread);
-          const marked = props.marked.has(row.id);
-          return (
-            <>
-              <Stack flexDirection="column" width="100%" flexShrink={0} {...background}>
-                {row.variant === "card" ? (
-                  <Card
-                    row={row}
-                    project={project}
-                    width={props.width}
-                    selected={selected}
-                    marked={marked}
-                  />
-                ) : row.variant === "search" ? (
-                  <SearchResult row={row} project={project} selected={selected} marked={marked} />
-                ) : (
-                  <Slim row={row} selected={selected} marked={marked} />
-                )}
-              </Stack>
-              {/* Cards are several lines each, so without this they read as one block of text. */}
-              {row.variant === "card" ? (
-                <Text height={1} flexShrink={0} tone="border" wrapMode="none">
-                  {(capabilities.unicode ? "─" : "-").repeat(Math.max(0, props.width))}
-                </Text>
-              ) : null}
-            </>
-          );
-        }}
-      />
+      {panes ? (
+        <>
+          <Stack height={panes.inbox} flexShrink={0} flexDirection="column">
+            {pane(inbox, 0, panes.inbox, inboxAnchor)}
+          </Stack>
+          <Stack height={panes.dock} flexShrink={0} flexDirection="column">
+            {pane(dock, split, panes.dock, dockAnchor)}
+          </Stack>
+        </>
+      ) : (
+        pane(listed, 0, listHeight, listCursor)
+      )}
     </Stack>
   );
 }

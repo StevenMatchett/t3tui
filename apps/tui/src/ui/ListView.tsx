@@ -30,6 +30,8 @@ export function variableListWindow(
 export interface ListViewProps<Item> {
   readonly items: readonly Item[];
   readonly selected: number;
+  /** The row the window keeps in view, when it is not the selection. */
+  readonly scrollAnchor?: number;
   /** Rows available, including one for the position counter when the list overflows. */
   readonly height: number;
   readonly rowHeight?: number | ((item: Item) => number);
@@ -52,6 +54,7 @@ export interface ListViewProps<Item> {
 export function ListView<Item>({
   items,
   selected,
+  scrollAnchor = selected,
   height,
   rowHeight = 1,
   itemKey,
@@ -74,9 +77,9 @@ export function ListView<Item>({
   const room = fits || !showCounter ? rows : rows - 1;
   const visible = Math.max(1, Math.floor(room / (rowHeight as number)));
   const { start, end } = heights
-    ? variableListWindow(heights, selected, room)
+    ? variableListWindow(heights, scrollAnchor, room)
     : (() => {
-        const first = listWindowStart(Math.max(0, selected), visible, items.length);
+        const first = listWindowStart(Math.max(0, scrollAnchor), visible, items.length);
         return { start: first, end: first + visible };
       })();
   const spacerAt = fits && pushDown ? items.findIndex(pushDown) : -1;

@@ -10,6 +10,7 @@ import {
   parseCustomSnooze,
   resolveShelfCursor,
   resolveShelfStatus,
+  shelfPaneHeights,
   threadRowsOf,
   toggleMarked,
   WORKING_EXIT_GRACE_MS,
@@ -157,6 +158,23 @@ describe("inbox shelves", () => {
     );
     expect(ids(rows)).toEqual(["title", "body"]);
     expect(threadRowsOf(rows)[1]).toMatchObject({ variant: "search", excerpt: "the login page" });
+  });
+});
+
+describe("docked shelves", () => {
+  it("stays one list while everything fits", () => {
+    expect(shelfPaneHeights(10, 5, 20)).toBeNull();
+    expect(shelfPaneHeights(0, 40, 20)).toBeNull();
+    expect(shelfPaneHeights(40, 0, 20)).toBeNull();
+  });
+
+  it("gives a side that fits only what it needs", () => {
+    expect(shelfPaneHeights(40, 3, 20)).toEqual({ inbox: 17, dock: 3 });
+    expect(shelfPaneHeights(4, 40, 20)).toEqual({ inbox: 4, dock: 16 });
+  });
+
+  it("splits evenly when both sides overflow", () => {
+    expect(shelfPaneHeights(40, 40, 21)).toEqual({ inbox: 11, dock: 10 });
   });
 });
 

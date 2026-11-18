@@ -67,6 +67,19 @@ export type ShelfRow =
 export const shelfRowHeight = (row: ShelfRow) =>
   row.kind !== "thread" ? 1 : row.variant === "card" ? 4 : row.variant === "search" ? 2 : 1;
 
+/**
+ * How a sidebar too short for every row divides between the inbox and the shelves docked below
+ * it, so Working and Settled never scroll out of sight. Whichever side fits takes only what it
+ * needs; when both overflow the shelves get half. Null while one list still fits.
+ */
+export function shelfPaneHeights(inboxNeed: number, dockNeed: number, available: number) {
+  if (inboxNeed === 0 || dockNeed === 0 || inboxNeed + dockNeed <= available || available < 4) {
+    return null;
+  }
+  const dock = Math.min(dockNeed, Math.max(Math.floor(available / 2), available - inboxNeed));
+  return { inbox: available - dock, dock };
+}
+
 const MINUTE_MS = 60_000;
 
 /** "now", "5m", "3h", "2d": the GUI's compact age. Clock skew reads as now, never negative. */

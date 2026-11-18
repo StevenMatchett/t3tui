@@ -1,6 +1,6 @@
 import { MouseButtons } from "@opentui/core/testing";
 import { makeClientFixture } from "../testing/clientFixture.ts";
-import { PlanId, type VcsStatusResult } from "@t3tools/contracts";
+import { PlanId, ThreadId, type VcsStatusResult } from "@t3tools/contracts";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import type { CapturedFrame } from "@opentui/core";
 import * as Option from "effect/Option";
@@ -1923,6 +1923,31 @@ describe("inbox sidebar", () => {
     await driver.input.pressKey("ARROW_UP");
     await driver.flush();
     expect(driver.captureFrame()).toContain("> Add project search");
+  });
+
+  it("keeps the shelves on screen below an inbox too long to fit", async () => {
+    const { driver, fixture } = await setupInbox();
+    await act(async () =>
+      driver.registry.update(fixture.shell, (state) => ({
+        ...state,
+        snapshot: Option.map(state.snapshot, (snapshot) => ({
+          ...snapshot,
+          threads: Array.from({ length: 20 }, (_, index) => ({
+            ...snapshot.threads[0]!,
+            id: ThreadId.make(`inbox-${String(index).padStart(2, "0")}`),
+            title: `Inbox thread ${index}`,
+          })),
+        })),
+      })),
+    );
+    await driver.flush();
+    expect(driver.captureFrame()).toContain("Settled (0)");
+    expect(rowOf(driver, "inbox-19")).toBeUndefined();
+
+    for (let step = 0; step < 19; step++) await driver.input.pressKey("ARROW_DOWN");
+    await driver.flush();
+    expect(rowOf(driver, "inbox-19")).toBeDefined();
+    expect(driver.captureFrame()).toContain("Settled (0)");
   });
 
   it("settles from the keyboard, keeps the cursor in place, and Ctrl+Z undoes it", async () => {
