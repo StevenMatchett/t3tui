@@ -5,7 +5,12 @@ import { ThreadId, type MessageId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { useMemo, useState, useContext, useEffect, useRef } from "react";
 
-import { AgentOutputOverlay, AgentSwarmPanel, agentOutputLines } from "./AgentSwarm.tsx";
+import {
+  AgentOutputOverlay,
+  AgentSwarmPanel,
+  agentOutputLines,
+  orderSwarmAgents,
+} from "./AgentSwarm.tsx";
 import { Composer } from "./composer/Composer.tsx";
 import { NoticeRow } from "./conversation/NoticeRow.tsx";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -174,7 +179,7 @@ export function Conversation({
   const secretRequest = approval || question ? undefined : thread?.secretRequests?.[0];
   const requestId = approval?.requestId ?? question?.requestId ?? secretRequest?.id ?? null;
   const requestMode = approval ? "requests" : question ? "questions" : "secret";
-  const agents = useMemo(() => thread?.agents ?? [], [thread?.agents]);
+  const agents = useMemo(() => orderSwarmAgents(thread?.agents ?? []), [thread?.agents]);
   const resolvedAgentCursor = Math.max(-1, Math.min(agentCursor, agents.length - 1));
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null;
   useEffect(() => {

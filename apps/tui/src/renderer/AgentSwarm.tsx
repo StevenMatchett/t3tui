@@ -1,3 +1,5 @@
+import { isActiveSubagentStatus } from "@t3tools/client-runtime/state/subagentRuntime";
+
 import type { TuiActivity, TuiAgent } from "../connection/models.ts";
 
 import { conversationLines } from "../ui/conversationLines.ts";
@@ -45,6 +47,13 @@ export function agentOutputLines(
         unicode,
       ).map((line, index) => ({ ...line, id: `agent:${agent.id}`, line: index }));
 }
+
+const swarmRank = (agent: TuiAgent) =>
+  isActiveSubagentStatus(agent.status) ? 0 : agent.status === "idle" ? 1 : 2;
+
+/** Running agents first, then idle ones, then finished ones; arrival order within each. */
+export const orderSwarmAgents = (agents: readonly TuiAgent[]) =>
+  agents.toSorted((a, b) => swarmRank(a) - swarmRank(b));
 
 const statusTone = (status: TuiAgent["status"]) =>
   status === "failed"
