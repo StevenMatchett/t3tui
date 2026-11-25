@@ -13,6 +13,7 @@ import { useKeyLayer } from "../ui/keymap.ts";
 import { Stack, Text } from "../ui/primitives.tsx";
 import { inlineTerminalText } from "../ui/textLayout.ts";
 import { EmbeddedTerminalSurface } from "./embedded-terminal/index.ts";
+import { runCommand } from "../connection/runCommand.ts";
 
 const discardedByClient = new WeakMap<TuiClient, Map<string, Set<string>>>();
 
@@ -149,7 +150,7 @@ export function ThreadTerminal({
       setError("A process is running. Press X again to close this shell.");
       return;
     }
-    const result = await terminals.close.run(registry, {
+    const result = await runCommand(registry, terminals.close, {
       environmentId,
       input: { threadId, terminalId },
     });
@@ -161,7 +162,7 @@ export function ThreadTerminal({
   };
   const handleTerminalEnded = useEffectEvent((status: "exited" | "closed") => {
     if (status === "exited")
-      void terminals.close.run(registry, {
+      void runCommand(registry, terminals.close, {
         environmentId,
         input: { threadId, terminalId, deleteHistory: true },
       });
@@ -232,14 +233,14 @@ export function ThreadTerminal({
             focused={focused}
             onReleaseFocus={() => setFocused(false)}
             onWrite={async (data) => {
-              const result = await terminals.write.run(registry, {
+              const result = await runCommand(registry, terminals.write, {
                 environmentId,
                 input: { threadId, terminalId, data },
               });
               if (!AsyncResult.isSuccess(result)) setError("Could not write to this shell.");
             }}
             onResize={async ({ cols, rows }) => {
-              const result = await terminals.resize.run(registry, {
+              const result = await runCommand(registry, terminals.resize, {
                 environmentId,
                 input: { threadId, terminalId, cols, rows },
               });

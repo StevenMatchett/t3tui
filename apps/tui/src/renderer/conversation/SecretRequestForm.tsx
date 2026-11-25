@@ -2,9 +2,9 @@ import { RegistryContext } from "@effect/atom-react";
 import { decodePasteBytes } from "@opentui/core";
 import { usePaste } from "@opentui/react";
 import {
-  SECRET_REQUEST_DEFAULT_PLACEHOLDER,
   secretRequestAnswerInput,
   secretRequestFailureMessage,
+  secretRequestInputs,
   secretRequestPrivacyNote,
 } from "@t3tools/client-runtime/secret-request";
 import { useContext, useState } from "react";
@@ -52,7 +52,8 @@ export function SecretRequestForm({
       },
     );
   };
-  const canSave = !sending && value.trim().length > 0;
+  const multiField = request.fields !== undefined;
+  const canSave = !multiField && !sending && value.trim().length > 0;
   usePaste((event) => {
     if (!active || sending) return;
     event.preventDefault();
@@ -63,7 +64,7 @@ export function SecretRequestForm({
     active,
     typing: true,
     raw: (key) => {
-      if (sending) return false;
+      if (sending || multiField) return false;
       if (key.name === "backspace") {
         setValue((current) => current.slice(0, -1));
         return true;
@@ -85,7 +86,7 @@ export function SecretRequestForm({
     bindings: {
       "secret.save": {
         enabled: canSave,
-        run: () => answer({ type: "save", secret: value }),
+        run: () => answer({ type: "save", values: { "": value } }),
       },
       "secret.decline": {
         enabled: !sending,
@@ -112,10 +113,12 @@ export function SecretRequestForm({
         truncate
         {...(value ? {} : { tone: "muted" })}
       >
-        {`> ${mask}${cursor}${value ? "" : (request.placeholder ?? SECRET_REQUEST_DEFAULT_PLACEHOLDER)}`}
+        {multiField
+          ? "This request asks for several values. Answer it in T3 Code."
+          : `> ${mask}${cursor}${value ? "" : (secretRequestInputs(request)[0]?.placeholder ?? "")}`}
       </Text>
       <Text height={1} flexShrink={0} wrapMode="none" truncate tone="muted">
-        {secretRequestPrivacyNote(request.delivery ? { delivery: request.delivery } : {})}
+        {secretRequestPrivacyNote(request)}
       </Text>
       <Text height={1} flexShrink={0} wrapMode="none" truncate tone={error ? "danger" : "muted"}>
         {error ?? (sending ? "Sending..." : "")}

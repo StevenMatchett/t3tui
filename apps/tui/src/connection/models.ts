@@ -145,6 +145,10 @@ export interface TuiSecretRequest {
   readonly placeholder?: string | undefined;
   /** `file` lets the agent's commands read the value; absent means it is stored securely. */
   readonly delivery?: "file" | undefined;
+  /** Several named values; the TUI only answers single-value requests. */
+  readonly fields?:
+    | readonly import("@t3tools/contracts").OrchestrationV2SecretRequestField[]
+    | undefined;
 }
 export interface TuiThread extends ThreadMetadata {
   readonly messages: readonly TuiMessage[];

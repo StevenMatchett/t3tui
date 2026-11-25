@@ -116,6 +116,8 @@ const directOnlyAuthorization = Layer.sync(
   () => ({
     authorizeBearer: directOnly,
     authorizeDpop: directOnly,
+    authorizeDirectDpop: directOnly,
+    authorizeDirectDpopHttp: directOnly,
     authorizeDpopHttp: directOnly,
     rememberCheckedDescriptor: () => Effect.void,
     renewDpopBeforeExpiry: directOnly,

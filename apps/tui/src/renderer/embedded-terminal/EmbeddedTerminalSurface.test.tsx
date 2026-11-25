@@ -5,6 +5,7 @@ import { lightTheme } from "../../ui/theme.ts";
 import { EmbeddedTerminalRenderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import type { TerminalOutputState } from "@t3tools/client-runtime/state/terminal";
+import { TERMINAL_SEQUENCE_GROUND } from "@t3tools/contracts";
 import {
   act,
   StrictMode,
@@ -34,6 +35,8 @@ function outputState(
 ): TerminalOutputState {
   const byteLength = encoder.encode(data).byteLength;
   return {
+    sequenceState: TERMINAL_SEQUENCE_GROUND,
+    textStartOffset: 0,
     generation,
     resetVersion,
     chunks:
@@ -140,11 +143,7 @@ afterEach(() => {
 const runtime = globalThis as typeof globalThis & {
   process?: { getBuiltinModule?: (id: string) => unknown };
 };
-const describeWithNativeFfi = runtime.process?.getBuiltinModule?.("node:ffi")
-  ? describe
-  : describe.skip;
-
-describeWithNativeFfi("EmbeddedTerminalSurface", () => {
+describe.skipIf(!runtime.process?.getBuiltinModule?.("node:ffi"))("EmbeddedTerminalSurface", () => {
   it.each([
     { width: 30, height: 6 },
     { width: 80, height: 24 },

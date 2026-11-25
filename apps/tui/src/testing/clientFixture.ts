@@ -41,6 +41,7 @@ import {
 
 import { EMPTY_ENVIRONMENT_THREAD_STATE } from "@t3tools/client-runtime/state/threads";
 import { EMPTY_VCS_ACTION_STATE } from "@t3tools/client-runtime/state/vcs";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { planThreadCommands } from "../features/chat/proposedPlan.ts";
 import type { TuiCommand } from "../connection/commands.ts";
@@ -357,7 +358,7 @@ export function makeClientFixture(
       status: "running",
     }),
   );
-  const terminalSuccess = { run: async () => AsyncResult.success(undefined) };
+  const terminalSuccess = { label: "terminal", run: () => Effect.void };
   const terminals = {
     metadata: () => terminalMetadata,
     attach: (request: {
@@ -377,14 +378,16 @@ export function makeClientFixture(
       return terminalBuffer;
     },
     write: {
-      run: async (_registry: unknown, request: { readonly input: { readonly data: string } }) => {
-        terminalWrites.push(request.input.data);
-        return AsyncResult.success(undefined);
-      },
+      label: "terminal write",
+      run: (_registry: unknown, request: { readonly input: { readonly data: string } }) =>
+        Effect.sync(() => {
+          terminalWrites.push(request.input.data);
+        }),
     },
     resize: terminalSuccess,
     close: {
-      run: async (
+      label: "terminal close",
+      run: (
         _registry: unknown,
         request: {
           readonly input: {
@@ -393,10 +396,10 @@ export function makeClientFixture(
             readonly deleteHistory?: boolean;
           };
         },
-      ) => {
-        terminalCloseInputs.push(request.input);
-        return AsyncResult.success(undefined);
-      },
+      ) =>
+        Effect.sync(() => {
+          terminalCloseInputs.push(request.input);
+        }),
     },
   } as unknown as NonNullable<TuiClient["terminals"]>;
   const newThreads = makeNewThreadActions({

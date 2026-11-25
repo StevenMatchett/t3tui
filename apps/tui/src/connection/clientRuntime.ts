@@ -44,6 +44,7 @@ import { createOrchestrationEnvironmentAtoms } from "@t3tools/client-runtime/sta
 import { createReviewEnvironmentAtoms } from "@t3tools/client-runtime/state/review";
 
 import { presentShell, presentShellState, presentThreadState } from "./presentation.ts";
+import { runCommand } from "./runCommand.ts";
 import { executeTuiCommand, type TuiCommand } from "./commands.ts";
 import type { ProviderCatalog } from "../features/chat/providerChoices.ts";
 import {
@@ -635,36 +636,41 @@ export function createTuiClient(
   const git: TuiGit = {
     actionState: (cwd) => vcsActions.stateAtom({ environmentId, cwd }),
     status: async (registry, cwd) => {
-      const result = await refreshVcsStatus.run(registry, { environmentId, input: { cwd } });
+      const result = await runCommand(registry, refreshVcsStatus, {
+        environmentId,
+        input: { cwd },
+      });
       if (AsyncResult.isFailure(result)) throw gitFailure(result, "Could not read the Git status.");
       if (!AsyncResult.isSuccess(result)) throw new Error("Could not read the Git status.");
       return result.value;
     },
     run: async (registry, target, input) => {
-      const result = await vcsActions
-        .runStackedAction({ environmentId, cwd: target.cwd })
-        .run(registry, {
+      const result = await runCommand(
+        registry,
+        vcsActions.runStackedAction({ environmentId, cwd: target.cwd }),
+        {
           ...input,
           actionId: Hex.encode(globalThis.crypto.getRandomValues(new Uint8Array(16))),
           threadId: target.threadId,
           projectId: target.projectId,
-        });
+        },
+      );
       if (AsyncResult.isFailure(result)) throw gitFailure(result, "The Git action failed.");
       if (!AsyncResult.isSuccess(result)) throw new Error("The Git action failed.");
       return result.value as GitRunStackedActionResult;
     },
     removeWorktree: async (registry, input) => {
-      const result = await vcs.removeWorktree.run(registry, { environmentId, input });
+      const result = await runCommand(registry, vcs.removeWorktree, { environmentId, input });
       if (AsyncResult.isFailure(result)) throw gitFailure(result, "Could not remove the worktree.");
     },
     pull: async (registry, cwd) => {
-      const result = await vcs.pull.run(registry, { environmentId, input: { cwd } });
+      const result = await runCommand(registry, vcs.pull, { environmentId, input: { cwd } });
       if (AsyncResult.isFailure(result)) throw gitFailure(result, "Could not pull.");
       if (!AsyncResult.isSuccess(result)) throw new Error("Could not pull.");
       return result.value;
     },
     listRefs: async (registry, cwd) => {
-      const result = await listRefs.run(registry, {
+      const result = await runCommand(registry, listRefs, {
         environmentId,
         input: { cwd, refKind: "all", limit: 200 },
       });
@@ -673,13 +679,13 @@ export function createTuiClient(
       return result.value.refs;
     },
     switchRef: async (registry, input) => {
-      const result = await vcs.switchRef.run(registry, { environmentId, input });
+      const result = await runCommand(registry, vcs.switchRef, { environmentId, input });
       if (AsyncResult.isFailure(result)) throw gitFailure(result, "Could not switch branch.");
       if (!AsyncResult.isSuccess(result)) throw new Error("Could not switch branch.");
       return result.value.refName ?? null;
     },
     createRef: async (registry, input) => {
-      const result = await vcs.createRef.run(registry, {
+      const result = await runCommand(registry, vcs.createRef, {
         environmentId,
         input: { ...input, switchRef: true },
       });
@@ -729,39 +735,39 @@ export function createTuiClient(
   const pullRequests: TuiPullRequests = {
     list: async (registry, input) =>
       settled(
-        await pullRequestList.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestList, { environmentId, input }),
         "Could not list pull requests.",
       ).entries,
     detail: async (registry, input) =>
       settled(
-        await pullRequestDetail.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestDetail, { environmentId, input }),
         "Could not read this pull request.",
       ),
     checks: async (registry, input) =>
       settled(
-        await pullRequestChecks.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestChecks, { environmentId, input }),
         "Could not read the checks.",
       ),
     runAction: async (registry, input) => {
       settled(
-        await pullRequestAction.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestAction, { environmentId, input }),
         "The pull request action failed.",
       );
     },
     activity: async (registry, input) =>
       settled(
-        await pullRequestActivity.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestActivity, { environmentId, input }),
         "Could not read the conversation.",
       ),
     stack: async (registry, input) =>
       settled(
-        await pullRequestStack.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestStack, { environmentId, input }),
         "Could not read the stack.",
       ),
     diff: (input) => pullRequestEnvironment.diff({ environmentId, input }),
     submitReview: async (registry, input) => {
       settled(
-        await pullRequestReview.run(registry, { environmentId, input }),
+        await runCommand(registry, pullRequestReview, { environmentId, input }),
         "The review was not submitted.",
       );
     },
@@ -769,7 +775,7 @@ export function createTuiClient(
       const cwd = source.workspaceRoot(entry.projectId);
       if (!cwd) throw new Error("This pull request's project is not in this environment.");
       const prepared = settled(
-        await preparePullRequestThread.run(registry, {
+        await runCommand(registry, preparePullRequestThread, {
           environmentId,
           input: { cwd, reference: entry.url, mode: "worktree" },
         }),
@@ -779,7 +785,7 @@ export function createTuiClient(
         Hex.encode(globalThis.crypto.getRandomValues(new Uint8Array(16))),
       );
       settled(
-        await command.run(registry, {
+        await runCommand(registry, command, {
           environmentId,
           input: {
             type: "thread.create",
@@ -848,9 +854,9 @@ export function createTuiClient(
     connection,
     providers,
     dispatch: async (registry, input) =>
-      AsyncResult.isSuccess(await command.run(registry, { environmentId, input })),
+      AsyncResult.isSuccess(await runCommand(registry, command, { environmentId, input })),
     createWorktree: async (registry, input) => {
-      const result = await createWorktree.run(registry, {
+      const result = await runCommand(registry, createWorktree, {
         environmentId,
         input: { ...input, path: null },
       });
@@ -860,7 +866,7 @@ export function createTuiClient(
     recoverWorktree: async (registry, input) => {
       let cursor: number | undefined;
       for (let page = 0; page < 100; page += 1) {
-        const result = await listRefs.run(registry, {
+        const result = await runCommand(registry, listRefs, {
           environmentId,
           input: {
             cwd: input.cwd,
@@ -902,7 +908,7 @@ export function createTuiClient(
       for (const attachment of attachments) {
         if (attachment.type !== "image" && attachment.type !== "file")
           throw new Error("Unsupported attachment.");
-        const result = await createAssetUrl.run(registry, {
+        const result = await runCommand(registry, createAssetUrl, {
           environmentId,
           input: {
             resource: {
@@ -935,7 +941,7 @@ export function createTuiClient(
             dataUrl: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
           });
         } else {
-          const upload = await createUploadUrl.run(registry, {
+          const upload = await runCommand(registry, createUploadUrl, {
             environmentId,
             input: {
               type: "file",
@@ -965,7 +971,7 @@ export function createTuiClient(
     providers,
     shell: shellValue,
     dispatch: async (registry, input) =>
-      AsyncResult.isSuccess(await command.run(registry, { environmentId, input })),
+      AsyncResult.isSuccess(await runCommand(registry, command, { environmentId, input })),
   });
   const refreshArchivedThreads = (registry: AtomRegistry.AtomRegistry) => {
     if (legacy)
@@ -974,7 +980,7 @@ export function createTuiClient(
   };
   const threadManagement = makeThreadManagementActions({
     dispatch: async (registry, input) =>
-      AsyncResult.isSuccess(await command.run(registry, { environmentId, input })),
+      AsyncResult.isSuccess(await runCommand(registry, command, { environmentId, input })),
     refreshArchived: refreshArchivedThreads,
   });
   const newProjects = makeNewProjectActions({
@@ -982,9 +988,9 @@ export function createTuiClient(
     connection,
     projectCloneTracking,
     dispatch: async (registry, input) =>
-      AsyncResult.isSuccess(await command.run(registry, { environmentId, input })),
+      AsyncResult.isSuccess(await runCommand(registry, command, { environmentId, input })),
     browse: async (registry, partialPath) => {
-      const result = await browseFilesystem.run(registry, {
+      const result = await runCommand(registry, browseFilesystem, {
         environmentId,
         input: { partialPath },
       });
@@ -992,9 +998,11 @@ export function createTuiClient(
       return result.value as FilesystemBrowseResult;
     },
     startClone: async (registry, input) =>
-      AsyncResult.isSuccess(await startProjectClone.run(registry, { environmentId, input })),
+      AsyncResult.isSuccess(
+        await runCommand(registry, startProjectClone, { environmentId, input }),
+      ),
     cloneRepository: async (registry, input) => {
-      const result = await cloneRepository.run(registry, { environmentId, input });
+      const result = await runCommand(registry, cloneRepository, { environmentId, input });
       if (!AsyncResult.isSuccess(result)) throw new Error("Could not clone that repository.");
       return result.value;
     },
@@ -1016,7 +1024,7 @@ export function createTuiClient(
     diffs: orchestration,
     review: createReviewEnvironmentAtoms(runtime),
     searchProjectEntries: async (registry, input) => {
-      const result = await searchProjectEntries.run(registry, { environmentId, input });
+      const result = await runCommand(registry, searchProjectEntries, { environmentId, input });
       if (!AsyncResult.isSuccess(result)) throw new Error("Could not search this project.");
       return result.value;
     },
@@ -1030,7 +1038,7 @@ export function createTuiClient(
               Hex.encode(globalThis.crypto.getRandomValues(new Uint8Array(16))),
             );
             const accepted = AsyncResult.isSuccess(
-              await command.run(registry, {
+              await runCommand(registry, command, {
                 environmentId,
                 input: {
                   type: "thread.fork",
@@ -1045,21 +1053,24 @@ export function createTuiClient(
           },
         }),
     writeProjectFile: async (registry, input) =>
-      AsyncResult.isSuccess(await writeProjectFile.run(registry, { environmentId, input })),
+      AsyncResult.isSuccess(await runCommand(registry, writeProjectFile, { environmentId, input })),
     implementPlanInNewThread: async (registry, source, plan) => {
       const [create, start] = planThreadCommands(source, plan);
       const dispatched = async (input: TuiCommand) =>
-        AsyncResult.isSuccess(await command.run(registry, { environmentId, input }));
+        AsyncResult.isSuccess(await runCommand(registry, command, { environmentId, input }));
       return (await dispatched(create)) && (await dispatched(start)) ? create.threadId : null;
     },
     answerSecretRequest: async (registry, input) => {
-      const result = await server.answerSecretRequest.run(registry, { environmentId, input });
+      const result = await runCommand(registry, server.answerSecretRequest, {
+        environmentId,
+        input,
+      });
       if (AsyncResult.isFailure(result)) throw Cause.squash(result.cause);
     },
     resolvePullRequest: async (registry, target) => {
       let branch = target.branch;
       if (!branch) {
-        const status = await refreshVcsStatus.run(registry, {
+        const status = await runCommand(registry, refreshVcsStatus, {
           environmentId,
           input: { cwd: target.cwd },
         });
@@ -1068,7 +1079,7 @@ export function createTuiClient(
         branch = status.value.refName;
       }
       if (!branch) throw new Error("This checkout has no branch (detached HEAD).");
-      const result = await resolvePullRequest.run(registry, {
+      const result = await runCommand(registry, resolvePullRequest, {
         environmentId,
         input: { cwd: target.cwd, reference: branch },
       });
@@ -1091,7 +1102,7 @@ export function createTuiClient(
         value.worktreePath ??
         snapshot?.projects.find((project) => project.id === value.projectId)?.workspaceRoot;
       return AsyncResult.isSuccess(
-        await server.refreshProviders.run(registry, {
+        await runCommand(registry, server.refreshProviders, {
           environmentId,
           input: {
             instanceId: value.modelSelection.instanceId,
@@ -1105,11 +1116,11 @@ export function createTuiClient(
     },
     thread,
     retry: async (registry) => {
-      await catalog.retryNow.run(registry, environmentId);
+      await runCommand(registry, catalog.retryNow, environmentId);
     },
     loadOlder: (registry, threadId) => {
       if (legacy) return legacy.loadOlder(registry, threadId);
-      void loadHistory.run(registry, { environmentId, input: threadId });
+      void runCommand(registry, loadHistory, { environmentId, input: threadId });
       return true;
     },
   };
@@ -1125,40 +1136,46 @@ function makeProviderSetup(
   return {
     updateSettings: async (registry, patch, mutation) =>
       settled(
-        await server.updateSettings.run(registry, {
+        await runCommand(registry, server.updateSettings, {
           environmentId,
           input: { patch, ...(mutation ? { providerInstanceMutation: mutation } : {}) },
         }),
       ),
     refresh: async (registry, instanceId) =>
       settled(
-        await server.refreshProviders.run(registry, {
+        await runCommand(registry, server.refreshProviders, {
           environmentId,
           input: { instanceId, refreshModels: true },
         }),
       ),
     authState: (instanceId) => server.providerAuthState({ environmentId, input: { instanceId } }),
     startAuth: async (registry, input) =>
-      settled(await server.startProviderAuth.run(registry, { environmentId, input })),
+      settled(await runCommand(registry, server.startProviderAuth, { environmentId, input })),
     respondAuth: async (registry, input) =>
-      settled(await server.respondProviderAuth.run(registry, { environmentId, input })),
+      settled(await runCommand(registry, server.respondProviderAuth, { environmentId, input })),
     completeAuth: async (registry, input) =>
-      settled(await server.completeProviderAuth.run(registry, { environmentId, input })),
+      settled(await runCommand(registry, server.completeProviderAuth, { environmentId, input })),
     cancelAuth: async (registry, input) =>
-      settled(await server.cancelProviderAuth.run(registry, { environmentId, input })),
+      settled(await runCommand(registry, server.cancelProviderAuth, { environmentId, input })),
     logout: async (registry, instanceId) =>
       settled(
-        await server.logoutProviderAuth.run(registry, { environmentId, input: { instanceId } }),
+        await runCommand(registry, server.logoutProviderAuth, {
+          environmentId,
+          input: { instanceId },
+        }),
       ),
     installState: (instanceId) =>
       server.providerInstallState({ environmentId, input: { instanceId } }),
     startInstall: async (registry, instanceId) =>
       settled(
-        await server.startProviderInstall.run(registry, { environmentId, input: { instanceId } }),
+        await runCommand(registry, server.startProviderInstall, {
+          environmentId,
+          input: { instanceId },
+        }),
       ),
     cancelInstall: async (registry, input) =>
-      settled(await server.cancelProviderInstall.run(registry, { environmentId, input })),
+      settled(await runCommand(registry, server.cancelProviderInstall, { environmentId, input })),
     update: async (registry, input) =>
-      settled(await server.updateProvider.run(registry, { environmentId, input })),
+      settled(await runCommand(registry, server.updateProvider, { environmentId, input })),
   };
 }

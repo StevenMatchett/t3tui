@@ -300,6 +300,7 @@ export function presentThread(projection: OrchestrationV2ThreadProjection): TuiT
               reason: item.reason,
               placeholder: item.placeholder,
               delivery: item.delivery,
+              fields: item.fields,
             },
           ]
         : [],
