@@ -52,20 +52,26 @@ jobs:
           sparse-checkout-cone-mode: false
       # The next version is one patch past the newest t3tui-v* tag or npm version, or
       # apps/tui/package.json when that is newer (raise it there to start a new minor or major).
-      # Tags count because npm takes minutes to list a version it just accepted.
+      # Tags count because npm takes minutes to list a version it just accepted. Platform packages
+      # count too: after a partial publish, reusing that version would pair old and new builds.
       - id: plan
         env:
           PLATFORMS: ${{ inputs.platforms || 'linux-x64,linux-arm64,darwin-arm64,darwin-x64' }}
           PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
         run: |
           set -euo pipefail
-          npm view t3tui versions --json > npm-versions.json 2>/dev/null || echo '[]' > npm-versions.json
+          mkdir npm-versions
+          for package in t3tui @t3tui/linux-x64 @t3tui/linux-arm64 @t3tui/darwin-arm64 @t3tui/darwin-x64; do
+            file="npm-versions/${package//\//-}.json"
+            npm view "$package" versions --json > "$file" 2>/dev/null || echo '[]' > "$file"
+          done
           git ls-remote --tags --refs origin 't3tui-v*' | sed 's#.*refs/tags/t3tui-v##' > tag-versions.txt
           version=$(node -e '
             const fs = require("node:fs");
             const parse = (v) => /^\d+\.\d+\.\d+$/.test(v) ? v.split(".").map(Number) : null;
             const compare = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-            const known = [].concat(JSON.parse(fs.readFileSync("npm-versions.json", "utf8")))
+            const known = fs.readdirSync("npm-versions")
+              .flatMap((file) => [].concat(JSON.parse(fs.readFileSync(`npm-versions/${file}`, "utf8"))))
               .concat(fs.readFileSync("tag-versions.txt", "utf8").split("\n"))
               .map(parse).filter(Boolean).sort(compare);
             let next = parse(require("./apps/tui/package.json").version);
