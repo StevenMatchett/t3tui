@@ -113,6 +113,7 @@ export function GitBranchPicker({
         searchFailed={false}
         searchedQuery={query}
         searchDebounceMs={0}
+        placeholder="Search branches, or type a new branch name"
         onSearchQueryChange={setQuery}
         onChoose={choose}
         onClose={onClose}

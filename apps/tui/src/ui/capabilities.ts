@@ -25,8 +25,8 @@ function supportsColor(environment: TerminalEnvironment) {
 function supportsUnicode(environment: TerminalEnvironment) {
   if (environment.T3_TUI_ASCII === "1" || environment.TERM === "dumb") return false;
 
-  const locale = environment.LC_ALL ?? environment.LC_CTYPE ?? environment.LANG;
-  if (locale === undefined) return true;
+  const locale = environment.LC_ALL || environment.LC_CTYPE || environment.LANG;
+  if (!locale) return true;
   return !/^(?:C|POSIX)$/i.test(locale);
 }
 

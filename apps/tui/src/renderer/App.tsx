@@ -26,6 +26,7 @@ export function App({ onInterrupt, client }: AppProps) {
   };
   const switchSelection = () =>
     setSelection((current) => (current === "cancel" ? "quit" : "cancel"));
+  const dialogRows = unsentNotes ? 4 : 3;
   useKeyLayer("app", {
     bindings: {
       "app.quit": () => {
@@ -58,7 +59,7 @@ export function App({ onInterrupt, client }: AppProps) {
           id="exit-confirmation"
           title="Close T3 TUI?"
           width={60}
-          height={unsentNotes ? 8 : 7}
+          height={dialogRows * 2 - 1 + 2}
           gap={1}
         >
           <Text height={1} wrapMode="none" truncate>

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "@effect/vitest";
+import { ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
 import { act } from "react";
 
 import { makeClientFixture } from "../testing/clientFixture.ts";
@@ -77,6 +78,64 @@ describe("settings", () => {
     });
     await driver.input.pressKey("r");
     expect(fixture.providerCalls).toContain("refresh:codex");
+  });
+
+  it("masks an API key edit and keeps a stored secret reference unless replaced or cleared", async () => {
+    const { driver, fixture } = await setup();
+    const instanceId = ProviderInstanceId.make("antigravity");
+    const reference = { provider: "onepassword", reference: "op://Private/item/field" };
+    await act(async () => {
+      driver.registry.set(fixture.providers, {
+        providers: [
+          {
+            ...fixture.provider,
+            instanceId,
+            driver: ProviderDriverKind.make("antigravity"),
+            displayName: "Fixture Gemini",
+          },
+        ],
+        status: "live",
+      });
+      driver.registry.update(fixture.settings, (current) =>
+        current
+          ? {
+              ...current,
+              providerInstances: {
+                [instanceId]: {
+                  driver: ProviderDriverKind.make("antigravity"),
+                  enabled: true,
+                  config: { apiKey: reference },
+                },
+              },
+            }
+          : current,
+      );
+    });
+    await driver.flush();
+    await open(driver, "Providers", "Fixture Gemini");
+    await select(driver, "API key");
+    expect(driver.captureFrame()).toContain("secret from onepassword");
+    const updates = fixture.settingsUpdates.length;
+    await driver.input.pressKey("RETURN");
+    await driver.input.pressKey("RETURN");
+    const configs = () =>
+      fixture.settingsUpdates
+        .slice(updates)
+        .map((update) =>
+          update.mutation?.operation === "upsert" ? update.mutation.instance.config : undefined,
+        );
+    expect(
+      configs().every((config) => config === undefined || "apiKey" in (config as object)),
+    ).toBe(true);
+    expect(driver.captureFrame()).toContain("secret from onepassword");
+    await driver.input.pressKey("RETURN");
+    await driver.input.typeText("sk-secret");
+    expect(driver.captureFrame()).not.toContain("sk-secret");
+    expect(driver.captureFrame()).toContain("•••••••••");
+    await driver.input.pressKey("RETURN");
+    expect(configs().at(-1)).toMatchObject({ apiKey: "sk-secret" });
+    await driver.input.pressKey("x");
+    expect(configs().at(-1)).not.toHaveProperty("apiKey");
   });
 
   it("signs in through the server with a device code", async () => {

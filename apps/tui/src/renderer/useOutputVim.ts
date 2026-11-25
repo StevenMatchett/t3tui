@@ -120,6 +120,7 @@ export function useOutputVim({
       const name = key.name.toLowerCase();
       if (!key.ctrl && name === "o") {
         if (!link) {
+          if (!key.shift && !selection && !mouseLinks) return false;
           setNotice(selectedLinks.size > 1 ? "Select just one link to open" : "No link selected");
           return true;
         }
@@ -211,11 +212,9 @@ export function useOutputVim({
         move(index);
         setSelection(null);
         return true;
-      } else if (name === "p") {
-        if (register.current) {
-          onPaste(register.current);
-          reset();
-        }
+      } else if (name === "p" && !key.shift && register.current) {
+        onPaste(register.current);
+        reset();
         return true;
       } else if (name === "escape" && selection) {
         setSelection(null);

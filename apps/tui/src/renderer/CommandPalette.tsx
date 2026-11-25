@@ -50,6 +50,7 @@ export function CommandPalette({
   searchFailed,
   searchedQuery,
   searchDebounceMs,
+  placeholder = "Search threads and projects, or > for commands",
   onSearchQueryChange,
   onChoose,
   onClose,
@@ -61,6 +62,7 @@ export function CommandPalette({
   readonly searchFailed: boolean;
   readonly searchedQuery: string;
   readonly searchDebounceMs: number;
+  readonly placeholder?: string;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onChoose: (id: string) => void;
   readonly onClose: () => void;
@@ -120,13 +122,12 @@ export function CommandPalette({
         focused={active}
         width="100%"
         value={query}
-        placeholder="Search threads and projects, or > for commands"
+        placeholder={placeholder}
         onInput={(value) => {
           setQuery(value);
           setCursor(0);
           const normalized = parseQuery(value).commandsOnly ? "" : value.trim().slice(0, 200);
-          if (normalized.length < 2) onSearchQueryChange("");
-          else if (searchDebounceMs === 0) onSearchQueryChange(normalized);
+          if (searchDebounceMs === 0 || normalized.length < 2) onSearchQueryChange(normalized);
         }}
       />
       <ListView
@@ -161,7 +162,7 @@ export function CommandPalette({
           ? "Conversation search unavailable · local results shown"
           : searchPending || searching
             ? "Searching conversation output..."
-            : `${selected + 1} of ${filtered.length}`}
+            : `${filtered.length === 0 ? 0 : selected + 1} of ${filtered.length}`}
       </Text>
     </Stack>
   );

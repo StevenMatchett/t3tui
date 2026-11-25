@@ -1369,7 +1369,7 @@ export const ACTIONS = {
     keyLabel: "↑↓",
     label: "Select",
     hint: 89,
-    ...keyOnly,
+    ...step,
   },
   "git.down": { scope: "git", title: "Next action", keys: ["down", "j"], ...step },
   "git.choose": {
@@ -1476,7 +1476,7 @@ export const ACTIONS = {
     keyLabel: "↑↓",
     label: "Scroll",
     hint: 40,
-    ...keyOnly,
+    ...step,
   },
   "plan.down": { scope: "plan", title: "Scroll down", keys: ["down", "j"], ...step },
   "plan.pageUp": { scope: "plan", title: "Page up", keys: ["pageup"], ...step },
@@ -1545,7 +1545,7 @@ export const ACTIONS = {
     keyLabel: "↑↓",
     label: "Select",
     hint: 89,
-    ...keyOnly,
+    ...step,
   },
   "pullRequests.down": {
     scope: "pullRequests",
@@ -1616,7 +1616,7 @@ export const ACTIONS = {
     keyLabel: "↑↓",
     label: "Scroll",
     hint: 40,
-    ...keyOnly,
+    ...step,
   },
   "pullRequestDetail.down": {
     scope: "pullRequestDetail",
@@ -2134,10 +2134,7 @@ const ASCII_LABELS = [
 /** Displays one chord, using ASCII names when the terminal cannot show arrows. */
 export function formatChord(chord: string, unicode = true) {
   const parts = chord === "+" ? ["+"] : chord.split("+");
-  const label = parts
-    .map(titleCaseChordPart)
-    .join("+")
-    .replace(/^⇧\+/u, "⇧");
+  const label = parts.map(titleCaseChordPart).join("+").replace(/^⇧\+/u, "⇧");
   return unicode ? label : asciiKeyLabel(label);
 }
 

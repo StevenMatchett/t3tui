@@ -41,6 +41,7 @@ import type { UnsentNotesGuard } from "./PullRequestsPanel.tsx";
 import { renderShellOverlay } from "./shellOverlays.tsx";
 import { usePaletteEntries } from "./usePaletteEntries.ts";
 import { useThreadTriage } from "./useThreadTriage.ts";
+import { threadVisitAt } from "../features/threads/management.ts";
 import { createSoundTracker } from "../features/chat/notificationSounds.ts";
 import { createNotificationAudio } from "../platform/notificationAudio.ts";
 
@@ -255,14 +256,23 @@ function AppShellContent({
     state.route === "conversation" && threadCapabilities.threadVisitedTracking === true
       ? (rows.threads.find((thread) => thread.id === state.threadId) ?? null)
       : null;
+  const visitAt = visitTarget ? threadVisitAt(visitTarget, shelfNow) : null;
+  const visitWokeAt = visitAt !== visitTarget?.updatedAt ? visitAt : null;
   // Having a thread open counts as seeing it, which is what clears Done and Woke on every client.
   useEffect(() => {
-    if (!visitTarget || !active) return;
+    if (!visitTarget || !visitAt || !active) return;
     void client.threadManagement.lifecycle(registry, visitTarget.id, {
       type: "visit",
-      at: visitTarget.updatedAt,
+      at: visitAt,
     });
-  }, [client, registry, active, visitTarget?.id, visitTarget?.latestTurn?.completedAt]);
+  }, [
+    client,
+    registry,
+    active,
+    visitTarget?.id,
+    visitTarget?.latestTurn?.completedAt,
+    visitWokeAt,
+  ]);
   const overlays = state.overlays;
   const pushOverlay = (overlay: ShellOverlay) => dispatch({ type: "push-overlay", overlay });
   const popOverlay = useCallback(() => dispatch({ type: "pop-overlay" }), [dispatch]);

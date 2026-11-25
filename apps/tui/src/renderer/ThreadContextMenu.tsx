@@ -67,16 +67,18 @@ export function NavigationContextMenu<Action extends string>({
   }[];
   readonly onChoose: (action: Action) => void;
 }) {
-  const [selected, setSelected] = useState(0);
+  const [selectedState, setSelected] = useState(0);
+  const selected = Math.max(0, Math.min(selectedState, actions.length - 1));
   // A short terminal scrolls the menu, so the selection is always on screen.
   const menuHeight = Math.min(actions.length + 2, height);
   const visible = Math.max(1, menuHeight - 2);
   const first = listWindowStart(selected, visible, actions.length);
   const choose = (index: number) => {
-    if (!actions[index]!.disabled) onChoose(actions[index]!.action);
+    const entry = actions[index];
+    if (entry && !entry.disabled) onChoose(entry.action);
   };
   const move = (offset: number) =>
-    setSelected((current) => (current + offset + actions.length) % actions.length);
+    setSelected((selected + offset + actions.length) % actions.length);
   useKeyLayer("contextMenu", {
     modal: true,
     bindings: {
@@ -133,10 +135,7 @@ export function NavigationContextMenu<Action extends string>({
                 if (event.button === 0) choose(index);
               }}
             >
-              <SelectionRow
-                label={disabled ? `${label} (running)` : label}
-                selected={selected === index}
-              />
+              <SelectionRow label={label} selected={selected === index} active={!disabled} />
             </Stack>
           );
         })}

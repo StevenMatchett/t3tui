@@ -34,6 +34,7 @@ describe("terminal capabilities", () => {
     expect(detectTerminalCapabilities({ LANG: "C" }).unicode).toBe(false);
     expect(detectTerminalCapabilities({ LANG: "POSIX" }).unicode).toBe(false);
     expect(detectTerminalCapabilities({ LANG: "C.UTF-8" }).unicode).toBe(true);
+    expect(detectTerminalCapabilities({ LC_ALL: "", LANG: "C" }).unicode).toBe(false);
   });
 });
 

@@ -176,8 +176,9 @@ export function ThreadTerminal({
     handledExit.current = exitKey;
     handleTerminalEnded(terminal.status);
   }, [terminal.lifecycleVersion, terminal.status, terminal.version, terminalId]);
+  const capturing = active && focused && terminal.status === "running";
   useKeyLayer("shell", {
-    active: active && !focused,
+    active: active && !capturing,
     bindings: {
       "shell.back": onBack,
       "shell.focus": () => setFocused(true),
@@ -188,7 +189,7 @@ export function ThreadTerminal({
     },
   });
   useKeyLayer("terminalFocus", {
-    active: active && focused,
+    active: capturing,
     modal: true,
     capture: true,
     bindings: { "terminalFocus.release": () => false },
@@ -230,7 +231,7 @@ export function ThreadTerminal({
             key={terminalId}
             id={`thread-terminal-${terminalId}`}
             output={terminal.output}
-            focused={focused}
+            focused={active && focused}
             onReleaseFocus={() => setFocused(false)}
             onWrite={async (data) => {
               const result = await runCommand(registry, terminals.write, {

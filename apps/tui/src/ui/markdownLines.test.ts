@@ -51,6 +51,18 @@ describe("Markdown conversation layout", () => {
     expect(rendered).toContain("+-----+");
     expect(rendered).toContain(">|");
     expect(rendered).not.toMatch(/[┌┐└┘─│►]/u);
+    const blocks = markdownLines(
+      "| a | b |\n|---|---|\n| 1 | 2 |\n\n---\n\n> quote",
+      80,
+      true,
+      false,
+    )
+      .map((line) => line.text)
+      .join("\n");
+    expect(blocks).toContain("a | b");
+    expect(blocks).toContain("--+--");
+    expect(blocks).toContain("| quote");
+    expect(blocks).not.toMatch(/[─│┼]/u);
   });
 
   it("waits for the closing fence before rendering streamed Mermaid", () => {

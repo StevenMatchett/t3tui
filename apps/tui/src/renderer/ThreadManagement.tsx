@@ -176,7 +176,12 @@ export function ThreadActionsForm({
             setTitle(value);
             setConfirmDelete(false);
           }}
-          onFocusRequest={() => setTarget("title")}
+          onFocusRequest={() => {
+            setTarget("title");
+            if (!cleanup) return;
+            setCleanup(null);
+            setMessage(null);
+          }}
         />
       </FormRow>
       <Stack height={1} flexDirection="row" gap={1}>

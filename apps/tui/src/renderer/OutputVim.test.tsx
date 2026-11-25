@@ -459,6 +459,30 @@ describe("Vim output navigation", () => {
     ).toContain("hello");
   });
 
+  it("lets o reach the pull request action when no link is selected", async () => {
+    const open = vi.spyOn(Browser, "openBrowser").mockResolvedValue(true);
+    const { driver } = await setup();
+    await driver.input.typeText("ggo");
+    await driver.flush();
+    expect(driver.captureFrame()).toContain("Pull request");
+    expect(open).toHaveBeenCalledExactlyOnceWith("https://github.com/example/repo/pull/42");
+  });
+
+  it("lets p reach New project while nothing has been yanked", async () => {
+    const { driver } = await setup();
+    await driver.input.typeText("ggp");
+    expect(driver.captureFrame()).toContain("New project");
+  });
+
+  it("does not paste the yank on Shift+P", async () => {
+    const { driver, fixture } = await setup();
+    await driver.input.typeText("ggjyy");
+    await driver.input.pressKey("p", { shift: true });
+    expect(driver.registry.get(fixture.client.actions.state(fixture.details[0]!.id)).draft).toBe(
+      "",
+    );
+  });
+
   it("highlights and yanks an inclusive visual selection in either direction", async () => {
     const { driver, copy } = await setup();
     await driver.input.typeText("ggvllllll");

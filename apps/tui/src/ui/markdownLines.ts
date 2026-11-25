@@ -122,7 +122,7 @@ function prefixLines(
   );
 }
 
-function tableLines(table: Tokens.Table, width: number): MarkdownLine[] {
+function tableLines(table: Tokens.Table, width: number, unicode: boolean): MarkdownLine[] {
   const rows = [table.header, ...table.rows].map((row, index) =>
     row.map((cell) => inline(cell.tokens, index === 0 ? { bold: true } : {})),
   );
@@ -168,7 +168,7 @@ function tableLines(table: Tokens.Table, width: number): MarkdownLine[] {
         const align = table.align[index];
         const left = align === "right" ? padding : align === "center" ? Math.floor(padding / 2) : 0;
         return [
-          ...(index ? [{ text: " │ " }] : []),
+          ...(index ? [{ text: unicode ? " │ " : " | " }] : []),
           { text: " ".repeat(left) },
           ...content,
           { text: " ".repeat(padding - left) },
@@ -177,7 +177,18 @@ function tableLines(table: Tokens.Table, width: number): MarkdownLine[] {
       result.push(line(spans));
     }
     if (rowIndex === 0)
-      result.push(line([{ text: widths.map((size) => "─".repeat(size)).join("─┼─") }], "muted"));
+      result.push(
+        line(
+          [
+            {
+              text: unicode
+                ? widths.map((size) => "─".repeat(size)).join("─┼─")
+                : widths.map((size) => "-".repeat(size)).join("-+-"),
+            },
+          ],
+          "muted",
+        ),
+      );
   });
   return result;
 }
@@ -232,7 +243,7 @@ function blocks(tokens: readonly Token[], width: number, unicode: boolean): Mark
         result.push(
           ...prefixLines(
             blocks(token.tokens, Math.max(1, width - 2), unicode),
-            width > 1 ? "│ " : "",
+            width > 1 ? (unicode ? "│ " : "| ") : "",
             undefined,
             "muted",
           ),
@@ -256,10 +267,10 @@ function blocks(tokens: readonly Token[], width: number, unicode: boolean): Mark
         taskMarker = inline([token]);
         break;
       case "table":
-        result.push(...tableLines(token, width));
+        result.push(...tableLines(token, width, unicode));
         break;
       case "hr":
-        append([{ text: "─".repeat(Math.min(40, width)) }], "muted");
+        append([{ text: (unicode ? "─" : "-").repeat(Math.min(40, width)) }], "muted");
         break;
       case "def":
         break;
