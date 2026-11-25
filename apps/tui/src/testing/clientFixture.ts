@@ -914,6 +914,7 @@ export function makeClientFixture(
     worktreeFailure,
     gitFailure,
     gitPulls,
+    gitRefs,
     gitSwitches,
     gitCreates,
     pathSearches,

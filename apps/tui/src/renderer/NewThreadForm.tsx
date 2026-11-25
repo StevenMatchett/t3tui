@@ -125,7 +125,9 @@ function Fields({
   const [mode, setMode] = useState<"local" | "worktree">(
     creation.attempt?.input.mode ?? defaults.defaultThreadEnvMode ?? "local",
   );
-  const [baseRef, setBaseRef] = useState(creation.attempt?.input.baseRef ?? "main");
+  const [typedBaseRef, setBaseRef] = useState(creation.attempt?.input.baseRef ?? null);
+  const [defaultBaseRef, setDefaultBaseRef] = useState<string | null>(null);
+  const baseRef = typedBaseRef ?? defaultBaseRef ?? "main";
   const [selection, setSelection] = useState<ModelSelection | null>(
     creation.attempt?.input.modelSelection ??
       (defaultChoice
@@ -146,6 +148,23 @@ function Fields({
   const [cursor, setCursor] = useState(0);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const locked = creation.attempt !== null;
+  useEffect(() => {
+    if (locked) return;
+    let cancelled = false;
+    client.git?.listRefs(registry, project.workspaceRoot).then(
+      (refs) => {
+        const preferred =
+          refs.find((ref) => ref.isDefault && !ref.isRemote) ??
+          refs.find((ref) => ref.isDefault) ??
+          refs.find((ref) => ref.current);
+        if (!cancelled && preferred) setDefaultBaseRef(preferred.name);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client, registry, project.workspaceRoot, locked]);
   const busy =
     creation.phase === "worktree" || creation.phase === "thread" || creation.phase === "created";
   const targets = locked

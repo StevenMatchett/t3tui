@@ -215,6 +215,7 @@ describe("new thread form", () => {
     "creates a worktree thread from keyboard fields (kitty=%s)",
     async (kitty) => {
       const { driver, fixture } = await setup(kitty);
+      fixture.gitRefs[1] = { name: "trunk", current: false, isDefault: true, worktreePath: null };
       await driver.input.pressKey("n");
       await driver.input.typeText("Isolated task");
       await driver.input.pressKey("TAB");
@@ -228,7 +229,7 @@ describe("new thread form", () => {
       await driver.input.pressKey("RETURN");
       expect(fixture.worktreeRequests).toHaveLength(1);
       expect(fixture.worktreeRequests[0]).toMatchObject({
-        refName: "main",
+        refName: "trunk",
         cwd: "/workspace/alpha",
       });
       expect(fixture.creationCommands[0]!.worktreePath).toContain("/worktrees/");
