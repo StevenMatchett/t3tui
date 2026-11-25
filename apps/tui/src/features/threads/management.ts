@@ -1,5 +1,7 @@
 import type { TuiCommand } from "../../connection/commands.ts";
+import type { TuiThreadShell } from "../../connection/models.ts";
 import { CommandId, type ThreadId } from "@t3tools/contracts";
+import { threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
 import type { AtomRegistry } from "effect/reactivity";
 
 export type ThreadManagementCommand = Extract<
@@ -77,6 +79,17 @@ export function planThreadUndo(
     thread.snoozedUntil != null ? [{ type: "snooze", until: thread.snoozedUntil }] : [];
   if (action === "unpin") return [pin, ...snooze];
   return [{ type: "unsettle" }, ...(thread.pinnedAt != null ? [pin] : []), ...snooze];
+}
+
+/** A visit must cover the wake too, or the Woke badge (wokeAt > lastVisitedAt) never clears. */
+export function threadVisitAt(thread: TuiThreadShell, now: string): string {
+  const wokeAt = threadWokeAt(
+    { ...thread, snoozedUntil: thread.snoozedUntil ?? null, snoozedAt: thread.snoozedAt ?? null },
+    { now },
+  );
+  return wokeAt !== null && Date.parse(wokeAt) > Date.parse(thread.updatedAt)
+    ? wokeAt
+    : thread.updatedAt;
 }
 
 const commandId = () => {

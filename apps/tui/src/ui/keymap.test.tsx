@@ -70,6 +70,18 @@ describe("action table", () => {
     if (reachableByKey) expect(actionKeyLabel(definition)).not.toBe("");
   });
 
+  it("repeats up and down movement alike", () => {
+    const byId = new Map(actions);
+    const mismatched = actions
+      .filter(([id]) => id.endsWith(".up"))
+      .filter(([id, up]) => {
+        const down = byId.get(id.replace(/\.up$/u, ".down") as ActionId);
+        return down !== undefined && Boolean(up.repeat) !== Boolean(down.repeat);
+      })
+      .map(([id]) => id);
+    expect(mismatched).toEqual([]);
+  });
+
   it("gives every action a title and a known scope", () => {
     for (const [, definition] of actions) {
       expect(definition.title.length).toBeGreaterThan(0);
@@ -225,6 +237,38 @@ describe("key routing", () => {
     store.dispatch(key("down", { repeated: true }));
     expect(opens).toBe(0);
     expect(moves).toBe(1);
+  });
+
+  it("lets a Shift+letter chord in a lower layer beat a shift-tolerant letter above it", () => {
+    const store = createKeymapStore();
+    const calls: string[] = [];
+    const workspace = store.register(
+      "workspace",
+      {},
+      {
+        bindings: {
+          "thread.markUnread": () => void calls.push("unread"),
+          "sidebar.showArchived": () => void calls.push("archived"),
+        },
+      },
+    );
+    store.register(
+      "history",
+      {},
+      {
+        bindings: {
+          "thread.openParent": () => void calls.push("parent"),
+          "thread.openRequests": () => void calls.push("requests"),
+        },
+      },
+    );
+    store.dispatch(key("u", { shift: true }));
+    store.dispatch(key("a", { shift: true }));
+    store.dispatch(key("u"));
+    expect(calls).toEqual(["unread", "archived", "parent"]);
+    workspace.update({ bindings: {} });
+    store.dispatch(key("u", { shift: true }));
+    expect(calls.at(-1)).toBe("parent");
   });
 
   it("matches letters with Shift, but not unshifted chords to Shift arrows", () => {

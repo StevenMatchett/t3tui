@@ -1,8 +1,5 @@
 # T3 Code TUI fork
 
-<!-- Checkpoint test: restore this edit to verify checkpoint recovery. -->
-<!-- Checkpoint test 2: a second edit to verify another restore point. -->
-
 > [!IMPORTANT]
 > This repository is an experimental, unaffiliated TUI-focused fork of
 > [T3 Code](https://github.com/pingdotgg/t3code). The working name and assets are temporary.
@@ -140,7 +137,8 @@ T3 TUI browses projects and threads, sends text prompts, follows agent output, s
 to approvals and questions, chooses models and options, and invokes provider skills. New threads can
 use the current checkout or an isolated Git worktree. It also has conversation search, Markdown
 output with Mermaid diagrams, saved, per-turn, and working-tree diff review, and an embedded
-terminal. Switching provider accounts in existing threads and Git write actions are unfinished.
+terminal. The Git panel commits, pulls, pushes, and opens pull requests. Switching provider accounts
+in existing threads is unfinished.
 
 ## See it in action
 

@@ -135,16 +135,41 @@ export function configFieldValue(config: unknown, field: ProviderConfigField): s
   return typeof value === "string" ? value : "";
 }
 
-/** Config with one field set. An emptied field is dropped when the schema says to omit it. */
+/** The secret store a masked field points into, when it holds a reference instead of text. */
+export function configSecretProvider(config: unknown, field: ProviderConfigField): string | null {
+  const value = configRecord(config)[field.key];
+  return typeof value === "object" &&
+    value !== null &&
+    "provider" in value &&
+    typeof value.provider === "string"
+    ? value.provider
+    : null;
+}
+
+/**
+ * Config with one field set. An emptied field is dropped when the schema says to omit it, except a
+ * masked field: its edit starts blank, so blank means unchanged and clearing is explicit.
+ */
 export function withConfigFieldValue(
   config: unknown,
   field: ProviderConfigField,
   value: string | boolean,
 ): Record<string, unknown> {
-  const { [field.key]: _previous, ...rest } = configRecord(config);
+  const record = configRecord(config);
+  if (field.control === "password" && typeof value === "string" && value.trim() === "")
+    return record;
+  const { [field.key]: _previous, ...rest } = record;
   if (typeof value === "string" && value.trim() === "" && field.clearWhenEmpty === "omit")
     return rest;
   return { ...rest, [field.key]: typeof value === "string" ? value.trim() : value };
+}
+
+export function withoutConfigField(
+  config: unknown,
+  field: ProviderConfigField,
+): Record<string, unknown> {
+  const { [field.key]: _previous, ...rest } = configRecord(config);
+  return rest;
 }
 
 /** The instance config the server runs. A built-in provider never edited has no entry yet. */

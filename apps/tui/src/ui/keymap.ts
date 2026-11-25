@@ -78,7 +78,7 @@ export function chordMatches(chord: string, key: KeyEvent) {
 }
 
 function exactShift(chord: string, key: KeyEvent) {
-  return chord.includes("shift+") === Boolean(key.shift) ? 1 : 0;
+  return chord.includes("shift+") === Boolean(key.shift);
 }
 
 function isPrintable(key: KeyEvent) {
@@ -176,29 +176,49 @@ export function createKeymapStore() {
     for (const listener of listeners) listener();
   };
 
+  const layerMatches = (layer: Layer, key: KeyEvent, typing: boolean) => {
+    const entries = Object.entries(layer.options.bindings ?? {}) as ReadonlyArray<
+      [ActionId, ActionBinding]
+    >;
+    return (
+      entries
+        .flatMap(([id, binding]) => {
+          if (!bindingEnabled(binding)) return [];
+          const chord = ACTIONS[id].keys.find((candidate) => chordMatches(candidate, key));
+          return chord === undefined ? [] : [{ id, binding, chord }];
+        })
+        // Below a text field only chords and function keys still apply.
+        .filter(({ chord }) => !typing || chord.includes("ctrl+") || /^f\d+$/u.test(chord))
+    );
+  };
+
   const dispatch = (key: KeyEvent) => {
     if (key.eventType === "release") return;
+    const routed = chain();
+    // A Shift+letter chord bound in any layer beats a shift-tolerant letter in a higher one.
+    let exactShiftBound = false;
+    if (key.shift) {
+      let typing = false;
+      for (const layer of routed) {
+        if (layerMatches(layer, key, typing).some(({ chord }) => exactShift(chord, key))) {
+          exactShiftBound = true;
+          break;
+        }
+        if (layer.options.typing) typing = true;
+      }
+    }
     let typing = false;
-    for (const layer of chain()) {
+    for (const layer of routed) {
       const printableBlocked = typing && isPrintable(key);
       if (!printableBlocked && layer.options.raw?.(key)) {
         key.preventDefault();
         key.stopPropagation();
         return;
       }
-      const entries = Object.entries(layer.options.bindings ?? {}) as ReadonlyArray<
-        [ActionId, ActionBinding]
-      >;
-      const matches = entries
-        .flatMap(([id, binding]) => {
-          if (!bindingEnabled(binding)) return [];
-          const chord = ACTIONS[id].keys.find((candidate) => chordMatches(candidate, key));
-          return chord === undefined ? [] : [{ id, binding, chord }];
-        })
-        .toSorted((a, b) => exactShift(b.chord, key) - exactShift(a.chord, key));
-      for (const { id, binding, chord } of matches) {
-        // Below a text field only chords and function keys still apply.
-        if (typing && !chord.includes("ctrl+") && !/^f\d+$/u.test(chord)) continue;
+      const matches = layerMatches(layer, key, typing).filter(
+        ({ chord }) => !exactShiftBound || exactShift(chord, key),
+      );
+      for (const { id, binding } of matches) {
         const definition: ActionDefinition = ACTIONS[id];
         if (key.repeated && !definition.repeat) {
           key.preventDefault();

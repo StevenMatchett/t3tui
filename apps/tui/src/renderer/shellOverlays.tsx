@@ -445,6 +445,7 @@ export function renderShellOverlay(
             searchFailed={false}
             searchedQuery=""
             searchDebounceMs={0}
+            placeholder="Filter projects"
             onSearchQueryChange={() => undefined}
             onChoose={(id) => {
               popOverlay();

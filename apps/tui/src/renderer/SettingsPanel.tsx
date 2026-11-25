@@ -1,5 +1,6 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import { useRenderer } from "@opentui/react";
+import { decodePasteBytes } from "@opentui/core";
+import { usePaste, useRenderer } from "@opentui/react";
 import {
   ProviderDriverKind,
   ProviderInstanceId,
@@ -15,6 +16,7 @@ import { useContext, useEffect, useState } from "react";
 import type { TuiClient } from "../connection/clientRuntime.ts";
 import {
   configFieldValue,
+  configSecretProvider,
   effectiveInstanceConfig,
   GENERAL_SETTINGS,
   generalValueLabel,
@@ -29,11 +31,13 @@ import {
   providerStatus,
   suggestInstanceId,
   withConfigFieldValue,
+  withoutConfigField,
   withEnvironmentVariable,
   withoutEnvironmentVariable,
 } from "../features/settings/settingsModel.ts";
 import { openBrowser } from "../platform/browser.ts";
 import { FormInput } from "../ui/FormField.tsx";
+import { useUi } from "../ui/context.tsx";
 import { useKeyLayer } from "../ui/keymap.ts";
 import { listWindowStart } from "../ui/ListView.tsx";
 import { Stack, Text } from "../ui/primitives.tsx";
@@ -62,6 +66,8 @@ interface SettingsRow {
   readonly edit?: {
     readonly value: string;
     readonly placeholder?: string;
+    /** Draws only the length of what is typed. */
+    readonly secret?: boolean;
     readonly commit: (value: string) => unknown;
   };
   readonly remove?: () => unknown;
@@ -516,13 +522,42 @@ function ProviderView({
         value: options[Math.max(0, index)]!.label,
         activate: () => setField(options[(index + 1) % options.length]!.value),
       });
+    } else if (field.control === "password") {
+      const secretProvider = configSecretProvider(instance.config, field);
+      const stored = secretProvider !== null || value !== "";
+      rows.push({
+        ...base,
+        value: secretProvider ? `secret from ${secretProvider}` : stored ? "••••••" : "",
+        ...(stored
+          ? {
+              description: [field.description, "Enter replaces it; X clears it."]
+                .filter(Boolean)
+                .join(" "),
+              remove: () =>
+                save(
+                  { ...instance, config: withoutConfigField(instance.config, field) },
+                  `Cleared ${field.label}.`,
+                ),
+            }
+          : {}),
+        edit: {
+          value: "",
+          secret: true,
+          ...(stored
+            ? { placeholder: "Leave blank to keep" }
+            : field.placeholder
+              ? { placeholder: field.placeholder }
+              : {}),
+          commit: setField,
+        },
+      });
     } else {
       const text = String(value);
       rows.push({
         ...base,
-        value: field.control === "password" && text ? "••••••" : text,
+        value: text,
         edit: {
-          value: field.control === "password" ? "" : text,
+          value: text,
           ...(field.placeholder ? { placeholder: field.placeholder } : {}),
           commit: setField,
         },
@@ -547,8 +582,12 @@ function ProviderView({
       description: "Environment variable for this provider. Enter replaces it; X removes it.",
       edit: {
         value: hidden ? "" : (plain ?? ""),
+        ...(hidden ? { secret: true, placeholder: "Leave blank to keep" } : {}),
+        // A hidden value's edit starts blank, so confirming it blank keeps the stored secret.
         commit: (value) =>
-          save(withEnvironmentVariable(instance, { ...variable, value, valueRedacted: false })),
+          hidden && value === ""
+            ? undefined
+            : save(withEnvironmentVariable(instance, { ...variable, value, valueRedacted: false })),
       },
       remove: () =>
         save(withoutEnvironmentVariable(instance, variable.name), `Removed ${variable.name}.`),
@@ -808,6 +847,7 @@ function SignInView({
             field.secret && credentials[field.name] ? "••••••" : (credentials[field.name] ?? ""),
           edit: {
             value: field.secret ? "" : (credentials[field.name] ?? ""),
+            ...(field.secret ? { secret: true } : {}),
             commit: (value) => setCredentials((current) => ({ ...current, [field.name]: value })),
           },
         });
@@ -970,6 +1010,17 @@ function SettingsList({
     : (selectable.find((index) => index >= cursor) ?? selectable.at(-1) ?? -1);
   const selected = selectedIndex === -1 ? undefined : rows[selectedIndex];
   const editingRow = editing ? rows.find((row) => row.id === editing.id) : undefined;
+  const editingSecret = editingRow?.edit?.secret === true && editing !== null;
+  const { capabilities } = useUi();
+  const typeSecret = (next: (current: string) => string) =>
+    setEditing((current) => current && { ...current, value: next(current.value) });
+  usePaste((event) => {
+    if (!active || !editingSecret) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const text = decodePasteBytes(event.bytes).replace(/[\r\n]+$/u, "");
+    typeSecret((current) => current + text);
+  });
   const move = (offset: number) => {
     if (selectable.length === 0) return;
     const position = Math.max(0, selectable.indexOf(selectedIndex));
@@ -989,6 +1040,23 @@ function SettingsList({
     modal: true,
     typing: editingRow !== undefined,
     ...(busy ? { context: "Saving…" } : {}),
+    // A masked edit has no input renderable, so the layer is its text entry.
+    raw: (key) => {
+      if (!editingSecret || key.ctrl || key.meta || key.option) return false;
+      if (key.name === "backspace") {
+        typeSecret((current) => current.slice(0, -1));
+        return true;
+      }
+      if (key.name === "return" || key.name === "escape") return false;
+      const text = key.sequence;
+      if (
+        !text ||
+        [...text].some((character) => character.charCodeAt(0) < 32 || character === "\x7f")
+      )
+        return false;
+      typeSecret((current) => current + text);
+      return true;
+    },
     bindings: {
       "settings.up": { enabled: !editingRow, run: () => move(-1) },
       "settings.down": { enabled: !editingRow, run: () => move(1) },
@@ -1046,13 +1114,27 @@ function SettingsList({
                 >
                   {`> ${row.label}: `}
                 </Text>
-                <FormInput
-                  id={`settings-edit-${row.id}`}
-                  value={editing.value}
-                  {...(row.edit?.placeholder ? { placeholder: row.edit.placeholder } : {})}
-                  focused={active}
-                  onInput={(value) => setEditing({ id: row.id, value })}
-                />
+                {editingSecret ? (
+                  <Text
+                    flexGrow={1}
+                    minWidth={0}
+                    wrapMode="none"
+                    truncate
+                    {...(editing.value ? {} : { tone: "muted" })}
+                  >
+                    {`${(capabilities.unicode ? "•" : "*").repeat(editing.value.length)}${
+                      active ? (capabilities.unicode ? "█" : "_") : ""
+                    }${editing.value ? "" : (row.edit?.placeholder ?? "")}`}
+                  </Text>
+                ) : (
+                  <FormInput
+                    id={`settings-edit-${row.id}`}
+                    value={editing.value}
+                    {...(row.edit?.placeholder ? { placeholder: row.edit.placeholder } : {})}
+                    focused={active}
+                    onInput={(value) => setEditing({ id: row.id, value })}
+                  />
+                )}
               </Stack>
             );
           }

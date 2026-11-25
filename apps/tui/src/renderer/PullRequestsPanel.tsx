@@ -46,8 +46,10 @@ const failureText = (failure: unknown, fallback: string) =>
   failure instanceof Error && failure.message ? failure.message : fallback;
 
 type ReviewNote = PullRequestReviewCommentDraft;
-/** Unsent line notes by pull request number. */
-type ReviewNotes = ReadonlyMap<number, readonly ReviewNote[]>;
+/** Unsent line notes by `repository#number`, since the list spans repositories. */
+type ReviewNotes = ReadonlyMap<string, readonly ReviewNote[]>;
+const notesKey = (entry: Pick<PullRequestListEntry, "repository" | "number">) =>
+  `${entry.repository}#${entry.number}`;
 
 /** Unsent notes the panel holds, and how to ask before something else takes the panel away. */
 export interface UnsentNotesGuard {
@@ -180,8 +182,8 @@ function PullRequests({
         pulls={pulls}
         entry={open}
         notes={notes}
-        onNotesChange={(number, update) =>
-          setNotes((current) => new Map(current).set(number, update(current.get(number) ?? [])))
+        onNotesChange={(key, update) =>
+          setNotes((current) => new Map(current).set(key, update(current.get(key) ?? [])))
         }
         onDiscardNotes={() => setNotes(new Map())}
         source={source}
@@ -299,7 +301,7 @@ function PullRequestDetailView({
   readonly entry: PullRequestListEntry;
   readonly notes: ReviewNotes;
   readonly onNotesChange: (
-    number: number,
+    key: string,
     update: (current: readonly ReviewNote[]) => readonly ReviewNote[],
   ) => void;
   readonly onDiscardNotes: () => void;
@@ -327,13 +329,13 @@ function PullRequestDetailView({
   const [lineComment, setLineComment] = useState<string | null>(null);
   // What to do once the user agrees to discard the unsent notes.
   const [discarding, setDiscarding] = useState<(() => void) | null>(null);
-  const drafts = notes.get(entry.number) ?? [];
+  const drafts = notes.get(notesKey(entry)) ?? [];
   const pendingNotes = [...notes].filter(([, items]) => items.length > 0);
   const pendingCount = pendingNotes.reduce((total, [, items]) => total + items.length, 0);
   const pendingSummary =
     pendingCount > 0
       ? `${pendingCount} ${pendingCount === 1 ? "note" : "notes"} on ${pendingNotes
-          .map(([number]) => `#${number}`)
+          .map(([key]) => key.slice(key.lastIndexOf("#")))
           .join(", ")}`
       : null;
   /** Runs `then` now, or after the user agrees to lose the unsent notes. */
@@ -447,7 +449,7 @@ function PullRequestDetailView({
   const verdicts = detail?.viewerPermissions.verdicts ?? [];
   const submitReview = async () => {
     if (!review) return;
-    if (review.verdict !== "approve" && !review.body.trim()) {
+    if (review.verdict !== "approve" && !review.body.trim() && drafts.length === 0) {
       setStatus({ text: `${VERDICT_LABEL[review.verdict]} needs a message.`, failed: true });
       return;
     }
@@ -462,7 +464,7 @@ function PullRequestDetailView({
         body: submitted.body,
         comments: drafts,
       });
-      onNotesChange(entry.number, () => []);
+      onNotesChange(notesKey(entry), () => []);
       setStatus({ text: "Review submitted.", failed: false });
       load();
     } catch (failure) {
@@ -498,7 +500,7 @@ function PullRequestDetailView({
         if (!body || !commentable) return;
         const path = diffPath(codeRows, Math.min(codeCursor, codeRows.length - 1));
         const note = { path, position: reviewPosition(commentable), body };
-        onNotesChange(entry.number, (current) => [...current, note]);
+        onNotesChange(notesKey(entry), (current) => [...current, note]);
         setLineComment(null);
       },
       "pullRequestLineComment.cancel": () => setLineComment(null),
@@ -548,6 +550,7 @@ function PullRequestDetailView({
       "pullRequestDetail.view": () => {
         setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]!);
         setOffset(0);
+        setCodeCursor(0);
       },
       "pullRequestDetail.review": {
         enabled: !busy && verdicts.length > 0 && detail?.state === "open",
@@ -689,7 +692,9 @@ function PullRequestDetailView({
           <FormInput
             id="pull-request-review"
             value={review.body}
-            placeholder={review.verdict === "approve" ? "Message (optional)" : "Message"}
+            placeholder={
+              review.verdict === "approve" || drafts.length > 0 ? "Message (optional)" : "Message"
+            }
             focused={active}
             onInput={(body) => {
               setStatus(null);

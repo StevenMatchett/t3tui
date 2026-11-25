@@ -1,14 +1,24 @@
 name: TUI npm packages
 
-# Builds and smoke-tests the `npx t3tui` packages on each platform. Every push to tui-main publishes
-# the next patch version through npm trusted publishing (no token), which npm ties to
+# Typechecks and tests the TUI, then builds and smoke-tests the `npx t3tui` packages on each
+# platform. Every push to tui-main that touches the package's sources publishes the next patch version through npm trusted publishing (no token), which npm ties to
 # StevenMatchett/t3tui and this filename, then tags and releases it.
 # See docs/operations/tui-npm-release.md.
 on:
   push:
     branches: [tui-main]
+    # What the packages bundle: the TUI, the server, their workspace packages, and the build inputs.
     # Docs never reach the packages.
-    paths-ignore: ["docs/**", "**/*.md"]
+    paths:
+      - "apps/tui/**"
+      - "apps/server/**"
+      - "packages/**"
+      - "scripts/lib/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/tui-npm-packages.yml"
+      - "!**/*.md"
   workflow_dispatch:
     inputs:
       platforms:
@@ -70,9 +80,36 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "t3tui $version: publish=$PUBLISH, platforms=$PLATFORMS"
 
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: pnpm/action-setup@v4
+
+      # The TUI renderer needs Node 26.4+ with FFI; the repository root pins Node 24.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @t3tools/tui typecheck
+
+      - name: Unit tests
+        run: pnpm --filter @t3tools/tui test
+
   build:
     name: ${{ matrix.platform }}
-    needs: plan
+    needs: [plan, verify]
     if: needs.plan.outputs.platforms != ''
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30

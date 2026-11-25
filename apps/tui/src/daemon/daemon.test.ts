@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off
+// @effect-diagnostics nodeBuiltinImport:off globalFetch:off
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
@@ -24,7 +24,7 @@ if (process.argv[2] === "pair") {
 } else {
   const server = http.createServer((request, response) => {
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ environmentId: "env-1", home: process.env.T3CODE_HOME }));
+    response.end(JSON.stringify({ environmentId: "env-1", entry: process.argv[1] }));
   });
   server.listen(Number(process.env.T3CODE_PORT), process.env.T3CODE_HOST);
   process.on("SIGTERM", () => server.close(() => process.exit(0)));
@@ -96,7 +96,76 @@ describe("service files", () => {
   });
 });
 
+const isPidAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const setupProcessDaemon = async () => {
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "tui-daemon-test-"));
+  const artifactRoot = NodePath.join(root, "artifact");
+  await NodeFSP.mkdir(NodePath.join(artifactRoot, "server"), { recursive: true });
+  await NodeFSP.writeFile(NodePath.join(artifactRoot, "server", "bin.mjs"), FAKE_SERVER);
+  const homeDir = NodePath.join(root, "home");
+  const port = await freePort();
+  const make = (packageVersion: string) =>
+    makeTuiDaemon({
+      homeDir,
+      env: { T3TUI_SERVICE_MANAGER: "process", T3TUI_DAEMON_PORT: String(port), PATH: "/usr/bin" },
+      platform: NodeProcess.platform,
+      artifactRoot,
+      packageVersion,
+      execPath: process.execPath,
+      log: () => undefined,
+    });
+  const daemon = make("1.0.0");
+  cleanups.push(async () => {
+    await daemon.uninstall();
+    await NodeFSP.rm(root, { recursive: true, force: true });
+  });
+  const readPid = async () => Number((await NodeFSP.readFile(daemon.paths.pidPath, "utf8")).trim());
+  return { daemon, make, readPid };
+};
+
 describe("process-managed daemon", () => {
+  it("stops the previous version's server before switching runtimes", async () => {
+    const { daemon, make, readPid } = await setupProcessDaemon();
+    await daemon.install();
+    const oldPid = await readPid();
+
+    const upgraded = make("2.0.0");
+    const { origin } = await upgraded.install();
+    expect(isPidAlive(oldPid)).toBe(false);
+    const newPid = await readPid();
+    expect(newPid).not.toBe(oldPid);
+    expect(isPidAlive(newPid)).toBe(true);
+    const descriptor = (await (
+      await fetch(new URL("/.well-known/t3/environment", origin))
+    ).json()) as { readonly entry: string };
+    expect(descriptor.entry).toBe(
+      NodePath.join(daemon.paths.runtimeRoot, "2.0.0", "server", "bin.mjs"),
+    );
+    expect(NodeFS.readdirSync(daemon.paths.runtimeRoot)).toEqual(["2.0.0"]);
+  });
+
+  it("uninstalls a server whose config is corrupt and reports it elsewhere", async () => {
+    const { daemon, readPid } = await setupProcessDaemon();
+    await daemon.install();
+    const pid = await readPid();
+    await NodeFSP.writeFile(daemon.paths.configPath, "{ not json");
+
+    await expect(daemon.status()).rejects.toThrow(TuiDaemonError);
+    await expect(daemon.status()).rejects.toThrow("t3tui daemon uninstall");
+    expect(await daemon.uninstall()).toBe(true);
+    expect(isPidAlive(pid)).toBe(false);
+    expect(NodeFS.existsSync(daemon.paths.configPath)).toBe(false);
+    expect(await daemon.status()).toMatchObject({ installed: false, running: false });
+  });
+
   it("installs, pairs, stops, restarts on demand, and uninstalls without losing data", async () => {
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "tui-daemon-test-"));
     const artifactRoot = NodePath.join(root, "artifact");

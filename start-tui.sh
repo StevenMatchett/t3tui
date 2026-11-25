@@ -6,6 +6,11 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 
 node_runner=(npx --yes node@26.4.0)
+if command -v node >/dev/null 2>&1 \
+  && node -e 'const [major, minor] = process.versions.node.split(".").map(Number);
+    process.exit(major > 26 || (major === 26 && minor >= 4) ? 0 : 1)' 2>/dev/null; then
+  node_runner=(node)
+fi
 
 "${node_runner[@]}" apps/tui/scripts/check-dependencies.mjs
 
@@ -50,8 +55,8 @@ fi
 if [[ "$link_and_pair" == true ]]; then
   for argument in "${launch_args[@]}"; do
     case "$argument" in
-      --connect | --connect=* | --pair-stdin | --new-environment)
-        printf '%s\n' '--link-and-pair cannot be combined with --connect, --pair-stdin, or --new-environment.' >&2
+      --connect | --connect=* | --pair-stdin | --new-environment | --local)
+        printf '%s\n' '--link-and-pair cannot be combined with --connect, --pair-stdin, --new-environment, or --local.' >&2
         exit 2
         ;;
     esac

@@ -259,11 +259,28 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
+/** The process may exit between the liveness check and the signal. */
+function signalPid(pid: number, signal: NodeJS.Signals) {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
+async function waitForExit(pid: number, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs;
+  while (isPidAlive(pid) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !isPidAlive(pid);
+}
+
 export function makeTuiDaemon(context: TuiDaemonContext) {
   const paths = tuiDaemonPaths(context.homeDir);
   const log = context.log ?? ((line: string) => process.stderr.write(`${line}\n`));
 
-  const readConfig = async (): Promise<TuiDaemonConfig | undefined> => {
+  const loadConfig = async (): Promise<TuiDaemonConfig | "invalid" | undefined> => {
     let text: string;
     try {
       text = await NodeFSP.readFile(paths.configPath, "utf8");
@@ -271,19 +288,34 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       throw error;
     }
-    const value = JSON.parse(text) as Partial<TuiDaemonConfig>;
+    let value: Partial<TuiDaemonConfig> | null;
+    try {
+      value = JSON.parse(text) as Partial<TuiDaemonConfig> | null;
+    } catch {
+      return "invalid";
+    }
     if (
+      typeof value !== "object" ||
+      value === null ||
       value.version !== 1 ||
       typeof value.port !== "number" ||
       typeof value.runtimeVersion !== "string" ||
       typeof value.nodePath !== "string" ||
       (value.manager !== "systemd" && value.manager !== "launchd" && value.manager !== "process")
     ) {
+      return "invalid";
+    }
+    return value as TuiDaemonConfig;
+  };
+
+  const readConfig = async () => {
+    const config = await loadConfig();
+    if (config === "invalid") {
       throw new TuiDaemonError(
         `${paths.configPath} is not a valid daemon config. Run \`t3tui daemon uninstall\`, then try again.`,
       );
     }
-    return value as TuiDaemonConfig;
+    return config;
   };
 
   const writeConfig = async (config: TuiDaemonConfig) => {
@@ -359,13 +391,24 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
     return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
   };
 
-  /** Only a PID we recorded, and only while it still runs our server entry. */
-  const ownedProcessPid = async (config: TuiDaemonConfig) => {
+  /**
+   * Only a PID we recorded, and only while it still runs our server entry (any runtime's entry
+   * when the config is unknown).
+   */
+  const ownedProcessPid = async (config?: TuiDaemonConfig) => {
     const pid = await readPid();
     if (pid === undefined || !isPidAlive(pid)) return undefined;
-    if (context.platform === "win32") return pid;
-    const command = run("ps", ["-p", String(pid), "-o", "command="]).stdout;
-    return command.includes(launchFor(config).program[1]!) ? pid : undefined;
+    const command =
+      context.platform === "win32"
+        ? run("powershell.exe", [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+          ]).stdout
+        : run("ps", ["-p", String(pid), "-o", "command="]).stdout;
+    const entry = config ? launchFor(config).program[1]! : `${paths.runtimeRoot}${NodePath.sep}`;
+    return command.includes(entry) ? pid : undefined;
   };
 
   const startProcess = async (config: TuiDaemonConfig) => {
@@ -389,16 +432,19 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
     }
   };
 
-  const stopProcess = async (config: TuiDaemonConfig) => {
+  const stopProcess = async (config?: TuiDaemonConfig) => {
     const pid = await ownedProcessPid(config);
-    await NodeFSP.rm(paths.pidPath, { force: true });
-    if (pid === undefined) return;
-    process.kill(pid, "SIGTERM");
-    const deadline = Date.now() + STOP_TIMEOUT_MS;
-    while (isPidAlive(pid) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (pid !== undefined) {
+      signalPid(pid, "SIGTERM");
+      if (!(await waitForExit(pid, STOP_TIMEOUT_MS))) {
+        signalPid(pid, "SIGKILL");
+        // Its runtime directory must not be pruned or replaced while it still runs.
+        if (!(await waitForExit(pid, STOP_TIMEOUT_MS))) {
+          throw new TuiDaemonError(`Could not stop the T3 server (pid ${pid}).`);
+        }
+      }
     }
-    if (isPidAlive(pid)) process.kill(pid, "SIGKILL");
+    await NodeFSP.rm(paths.pidPath, { force: true });
   };
 
   const writeServiceFile = async (config: TuiDaemonConfig) => {
@@ -419,8 +465,13 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
     }
   };
 
-  const startService = async (config: TuiDaemonConfig, { restart = false } = {}) => {
+  /** `restartFrom` is the config the running server was started with. */
+  const startService = async (
+    config: TuiDaemonConfig,
+    { restartFrom }: { readonly restartFrom?: TuiDaemonConfig } = {},
+  ) => {
     const names = serviceNames(context);
+    const restart = restartFrom !== undefined;
     switch (config.manager) {
       case "systemd":
         runOrThrow("systemctl", ["--user", restart ? "restart" : "start", names.systemdUnit]);
@@ -434,14 +485,15 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
         return;
       }
       case "process":
-        if (restart) await stopProcess(config);
+        // The running server's command line names its own runtime, not the one being installed.
+        if (restartFrom) await stopProcess(restartFrom);
         await startProcess(config);
     }
   };
 
-  const stopService = async (config: TuiDaemonConfig) => {
+  const stopService = async (manager: TuiDaemonManager, config?: TuiDaemonConfig) => {
     const names = serviceNames(context);
-    switch (config.manager) {
+    switch (manager) {
       case "systemd":
         runOrThrow("systemctl", ["--user", "stop", names.systemdUnit]);
         return;
@@ -485,7 +537,9 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
     const previous = await readConfig();
     const runtimeDirectory = await installRuntime(context.packageVersion);
     const manager = selectTuiDaemonManager(context);
-    if (previous && previous.manager !== manager) await uninstallService(previous);
+    if (previous && previous.manager !== manager) {
+      await uninstallService(previous.manager, previous);
+    }
     const config: TuiDaemonConfig = {
       version: 1,
       port: options.port ?? previous?.port ?? defaultPort(),
@@ -502,29 +556,36 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
       runOrThrow("systemctl", ["--user", "daemon-reload"]);
       runOrThrow("systemctl", ["--user", "enable", serviceNames(context).systemdUnit]);
     }
-    await startService(config, { restart: previous !== undefined });
+    await startService(config, previous === undefined ? {} : { restartFrom: previous });
     const origin = await waitUntilReady(config);
     await pruneRuntimes(context.packageVersion);
     return { config, origin };
   };
 
-  const uninstallService = async (config: TuiDaemonConfig) => {
+  const uninstallService = async (manager: TuiDaemonManager, config?: TuiDaemonConfig) => {
     const names = serviceNames(context);
-    await stopService(config).catch(() => undefined);
-    if (config.manager === "systemd") {
+    await stopService(manager, config).catch(() => undefined);
+    if (manager === "systemd") {
       run("systemctl", ["--user", "disable", names.systemdUnit]);
       await NodeFSP.rm(names.systemdUnitPath, { force: true });
       run("systemctl", ["--user", "daemon-reload"]);
       run("systemctl", ["--user", "reset-failed", names.systemdUnit]);
-    } else if (config.manager === "launchd") {
+    } else if (manager === "launchd") {
       await NodeFSP.rm(names.launchdPlistPath, { force: true });
     }
   };
 
   const uninstall = async () => {
-    const config = await readConfig();
+    const config = await loadConfig();
     if (config === undefined) return false;
-    await uninstallService(config);
+    if (config === "invalid") {
+      // The manager is unknown, so undo whatever this platform's managers could have installed.
+      await uninstallService("process");
+      if (context.platform === "linux") await uninstallService("systemd");
+      if (context.platform === "darwin") await uninstallService("launchd");
+    } else {
+      await uninstallService(config.manager, config);
+    }
     await NodeFSP.rm(paths.runtimeRoot, { recursive: true, force: true });
     await NodeFSP.rm(paths.configPath, { force: true });
     await NodeFSP.rm(paths.pidPath, { force: true });
@@ -621,7 +682,7 @@ export function makeTuiDaemon(context: TuiDaemonContext) {
     stop: async () => {
       const config = await readConfig();
       if (config === undefined) return false;
-      await stopService(config);
+      await stopService(config.manager, config);
       return true;
     },
   };

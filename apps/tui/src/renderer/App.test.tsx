@@ -87,4 +87,27 @@ describe("App exit confirmation", () => {
     await driver.input.pressKey("c", { ctrl: true });
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
+
+  it("fits the buttons when unsent review notes are named", async () => {
+    const { driver } = await setup();
+    await driver.input.pressKey("RETURN");
+    await driver.input.pressKey("RETURN");
+    await driver.input.pressKey("k", { ctrl: true });
+    await driver.input.typeText("pull requests list");
+    await driver.input.pressKey("RETURN");
+    await driver.input.pressKey("RETURN");
+    await driver.input.pressKey("TAB");
+    await driver.input.pressKey("TAB");
+    for (let index = 0; index < 5; index += 1) await driver.input.pressKey("ARROW_DOWN");
+    await driver.input.pressKey("n");
+    await driver.input.typeText("Keep me.");
+    await driver.flush();
+    await driver.input.pressKey("RETURN");
+    await driver.input.pressKey("c", { ctrl: true });
+
+    expect(driver.captureFrame()).toContain("Unsent review notes will be lost");
+    const dialog = driver.renderer.root.findDescendantById("exit-confirmation")!;
+    const quit = driver.renderer.root.findDescendantById("exit-confirm-quit")!;
+    expect(quit.screenY).toBeLessThan(dialog.screenY + dialog.height - 1);
+  });
 });

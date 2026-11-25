@@ -15,7 +15,9 @@ import {
   providerInstanceUpdate,
   providerStatus,
   suggestInstanceId,
+  configSecretProvider,
   withConfigFieldValue,
+  withoutConfigField,
 } from "./settingsModel.ts";
 
 const codex = ProviderDriverKind.make("codex");
@@ -58,6 +60,22 @@ describe("provider config fields", () => {
       homePath: "~",
     });
     expect(withConfigFieldValue({}, binaryPath, " /y ")).toEqual({ binaryPath: "/y" });
+  });
+
+  it("keeps a stored secret when its masked edit is confirmed blank, and clears it explicitly", () => {
+    const apiKey = providerConfigFields(ProviderDriverKind.make("antigravity")).find(
+      (field) => field.key === "apiKey",
+    )!;
+    const reference = { provider: "onepassword", reference: "op://Private/item/field" };
+    expect(apiKey.control).toBe("password");
+    expect(withConfigFieldValue({ apiKey: "sk-1" }, apiKey, "")).toEqual({ apiKey: "sk-1" });
+    expect(withConfigFieldValue({ apiKey: reference }, apiKey, " ")).toEqual({ apiKey: reference });
+    expect(withConfigFieldValue({ apiKey: reference }, apiKey, "sk-2")).toEqual({ apiKey: "sk-2" });
+    expect(withoutConfigField({ apiKey: "sk-1", gcpProject: "p" }, apiKey)).toEqual({
+      gcpProject: "p",
+    });
+    expect(configSecretProvider({ apiKey: reference }, apiKey)).toBe("onepassword");
+    expect(configSecretProvider({ apiKey: "sk-1" }, apiKey)).toBeNull();
   });
 });
 
