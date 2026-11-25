@@ -125,6 +125,8 @@ export async function buildTuiArtifact({ directory } = {}) {
         "claude-history-worker": NodePath.join(serverDirectory, "src/claude-history-worker.ts"),
       },
       outDir: NodePath.join(output, "server"),
+      // Matches apps/server/vite.config.ts: jsonc-parser's UMD main requires its own files at runtime.
+      alias: { "jsonc-parser": "jsonc-parser/lib/esm/main.js" },
       deps: {
         alwaysBundle: (id) => !isExternalCliDependency(id),
         neverBundle: isExternalCliDependency,
